@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Trash2, Edit2, Package, Search } from "lucide-react";
+import { EditGate } from "@/components/project-cost/edit-gate";
 import { toast } from "sonner";
 
 interface ProductsViewProps {
@@ -209,11 +210,13 @@ export function ProductsView({
         </div>
 
         <Dialog open={isAddOpen} onOpenChange={(open) => { setIsAddOpen(open); if (!open) resetForm(); }}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 font-semibold">
-              <Plus className="h-4 w-4" /> เพิ่มสินค้า
-            </Button>
-          </DialogTrigger>
+          <EditGate>
+            <DialogTrigger asChild>
+              <Button className="gap-2 font-semibold">
+                <Plus className="h-4 w-4" /> เพิ่มสินค้า
+              </Button>
+            </DialogTrigger>
+          </EditGate>
           <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
             <form onSubmit={handleAddSubmit}>
               <DialogHeader>
@@ -290,14 +293,16 @@ export function ProductsView({
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="flex justify-center gap-1">
-                          <Button size="icon" variant="ghost" onClick={() => handleStartEdit(p)} className="h-7 w-7" title="แก้ไข">
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button size="icon" variant="ghost" onClick={() => handleDelete(p)} className="h-7 w-7 text-destructive hover:bg-destructive/10" title="ลบ">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
+                        <EditGate fallback={<span className="text-muted-foreground/40">—</span>}>
+                          <div className="flex justify-center gap-1">
+                            <Button size="icon" variant="ghost" onClick={() => handleStartEdit(p)} className="h-7 w-7" title="แก้ไข">
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button size="icon" variant="ghost" onClick={() => handleDelete(p)} className="h-7 w-7 text-destructive hover:bg-destructive/10" title="ลบ">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </EditGate>
                       </TableCell>
                     </TableRow>
                   ))

@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Building2 } from "lucide-react";
+import { Building2, Lock } from "lucide-react";
+import { useOrg } from "@/hooks/use-org";
 
 interface CompanyInfoSectionProps {
   companyInfo: CompanyInfo;
@@ -14,15 +15,25 @@ interface CompanyInfoSectionProps {
 }
 
 export function CompanyInfoSection({ companyInfo, onUpdate }: CompanyInfoSectionProps) {
+  // ข้อมูลบริษัทแชร์ระดับ org — แก้ได้เฉพาะผู้ดูแล (ตรงกับ RLS)
+  const { isAdmin } = useOrg();
   return (
     <Card className="border-border/50 bg-card/50">
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center gap-2">
           <Building2 className="h-5 w-5 text-primary" /> ข้อมูลผู้ออกใบเสนอราคา (ไอโปรเกรสเอ็กซ์ จำกัด)
         </CardTitle>
-        <CardDescription>ตั้งค่าครั้งเดียว ใช้กับใบเสนอราคาทุกใบ</CardDescription>
+        <CardDescription>
+          ตั้งค่าครั้งเดียว ใช้กับใบเสนอราคาทุกใบ
+          {!isAdmin && (
+            <span className="ml-1 inline-flex items-center gap-1 text-amber-600">
+              <Lock className="h-3 w-3" /> แก้ได้เฉพาะผู้ดูแล
+            </span>
+          )}
+        </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent>
+        <fieldset disabled={!isAdmin} className="space-y-4 border-0 p-0 m-0 min-w-0 disabled:opacity-70">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="co-name">ชื่อบริษัท</Label>
@@ -100,6 +111,7 @@ export function CompanyInfoSection({ companyInfo, onUpdate }: CompanyInfoSection
             />
           </div>
         </div>
+        </fieldset>
       </CardContent>
     </Card>
   );

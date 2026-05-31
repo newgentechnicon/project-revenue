@@ -151,6 +151,48 @@ export const CommissionSchema = z.object({
 export type CommissionInput = z.infer<typeof CommissionSchema>;
 
 // ====================================================
+// Ledger — รายการเดินบัญชี (เงินเข้า/ออกจริง) + ไฟล์แนบ
+// ====================================================
+export const LedgerDirectionSchema = z.enum(["in", "out"]);
+
+export const LedgerCategorySchema = z.enum([
+  "project_payment", "subscription", "commission",
+  "salary", "overhead", "tax", "refund", "other",
+]);
+
+export const LedgerAttachmentSchema = z.object({
+  id: z.string(),
+  fileName: z.string(),
+  storagePath: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number().min(0),
+  uploadedAt: z.string(),
+});
+
+export const LedgerEntrySchema = z.object({
+  id: z.string(),
+  date: z.string(),
+  direction: LedgerDirectionSchema,
+  amount: z.number().min(0),
+  vatAmount: z.number().min(0).optional(),
+  whtAmount: z.number().min(0).optional(),
+  category: LedgerCategorySchema,
+  account: z.string().optional(),
+  counterparty: z.string().optional(),
+  reference: z.string().optional(),
+  description: z.string().optional(),
+  sourceType: z
+    .enum(["project", "subscription", "commission", "payroll", "overhead", "manual"])
+    .optional(),
+  sourceId: z.string().optional(),
+  attachments: z.array(LedgerAttachmentSchema),
+  ownerId: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type LedgerEntryInput = z.infer<typeof LedgerEntrySchema>;
+
+// ====================================================
 // Project sub-types
 // ====================================================
 export const ProjectPositionAllocationSchema = z.object({

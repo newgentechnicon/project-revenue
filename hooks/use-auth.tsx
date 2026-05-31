@@ -38,14 +38,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const supabase = getSupabaseBrowserClient();
     let cancelled = false;
 
+    // เปิดใช้งาน session: ตั้ง storage repo → ตรวจ/สร้าง membership (auto-join org)
+    // → แล้วค่อย setMode("supabase") เพื่อกัน race กับการ hydrate ข้อมูล
+    const activateSession = async (newSession: Session) => {
+      setSession(newSession);
+      setUser(newSession.user);
+      setStorageRepository(new SupabaseStorageRepository(supabase));
+      try {
+        const { error } = await supabase.rpc("ensure_membership");
+        if (error) console.error("[use-auth] ensure_membership failed:", error);
+      } catch (e) {
+        console.error("[use-auth] ensure_membership threw:", e);
+      }
+      if (!cancelled) setMode("supabase");
+    };
+
     (async () => {
       const { data } = await supabase.auth.getSession();
       if (cancelled) return;
       if (data.session) {
-        setSession(data.session);
-        setUser(data.session.user);
-        setStorageRepository(new SupabaseStorageRepository(supabase));
-        setMode("supabase");
+        await activateSession(data.session);
       } else {
         // Not logged in — no storage active. AuthGate will show login form.
         clearStorageRepository();
@@ -56,12 +68,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Subscribe to auth changes
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-      setUser(newSession?.user ?? null);
       if (newSession) {
-        setStorageRepository(new SupabaseStorageRepository(supabase));
-        setMode("supabase");
+        void activateSession(newSession);
       } else {
+        setSession(null);
+        setUser(null);
         clearStorageRepository();
         setMode("anonymous");
       }

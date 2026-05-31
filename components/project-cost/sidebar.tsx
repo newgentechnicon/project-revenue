@@ -8,12 +8,15 @@ import {
   Download, Upload, Moon, Sun, Laptop, DollarSign,
   FolderKanban, CalendarRange, LogOut, User as UserIcon, Banknote,
   Repeat, Package, Building2, BarChart3, Receipt,
-  Percent, Handshake,
+  Percent, Handshake, BookText, Users2,
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
+import { useOrg } from "@/hooks/use-org";
+import type { OrgRole } from "@/lib/types";
+import { VIEW_FEATURE } from "@/lib/features";
 
 export type SidebarViewId =
   | "projects_list"
@@ -27,12 +30,14 @@ export type SidebarViewId =
   | "cashflow"
   | "subscriptions"
   | "commissions"
+  | "ledger"
   | "master_products"
   | "master_customers"
   | "master_commission_payees"
   | "master_positions"
   | "master_overheads"
-  | "master_employees";
+  | "master_employees"
+  | "team";
 
 const PROJECT_SCOPE_VIEWS: SidebarViewId[] = [
   "projects_list",
@@ -68,6 +73,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: "subscriptions", label: "รายรับประจำ", icon: Repeat },
       { id: "commissions", label: "ค่าคอมมิชชั่น", icon: Percent },
+      { id: "ledger", label: "รายการเดินบัญชี", icon: BookText },
       { id: "cashflow", label: "Cashflow", icon: Banknote },
       { id: "company_analytics", label: "Company Analytics", icon: BarChart3 },
     ],
@@ -99,6 +105,14 @@ interface SidebarProps {
   onImportData: (dataStr: string) => boolean;
 }
 
+const ROLE_SHORT: Record<OrgRole, string> = {
+  owner: "เจ้าของ",
+  admin: "ผู้ดูแล",
+  accountant: "บัญชี",
+  sales: "ฝ่ายขาย",
+  viewer: "ผู้ชม",
+};
+
 export function Sidebar({
   activeView,
   onSelectView,
@@ -107,7 +121,17 @@ export function Sidebar({
 }: SidebarProps) {
   const { setTheme, theme } = useTheme();
   const { user, mode, signOut } = useAuth();
+  const { role, isAdmin, canView } = useOrg();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // กรองเมนูตามสิทธิ์ view ของแต่ละ feature แล้วตัด section ที่ว่างทิ้ง
+  const visibleSections = NAV_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter((it) => {
+      const f = VIEW_FEATURE[it.id];
+      return !f || canView(f);
+    }),
+  })).filter((section) => section.items.length > 0);
 
   const isProjectFlow = PROJECT_SCOPE_VIEWS.includes(activeView);
 
@@ -147,7 +171,7 @@ export function Sidebar({
 
       {/* Main Navigation — grouped */}
       <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
-        {NAV_SECTIONS.map((section) => (
+        {visibleSections.map((section) => (
           <div key={section.title} className="space-y-1">
             <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
               {section.title}
@@ -171,6 +195,24 @@ export function Sidebar({
             })}
           </div>
         ))}
+
+        {/* ตั้งค่า — เฉพาะผู้ดูแล */}
+        {isAdmin && (
+          <div className="space-y-1">
+            <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
+              ตั้งค่า
+            </div>
+            <Button
+              variant={activeView === "team" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => onSelectView("team")}
+              className="w-full justify-start text-sm font-semibold h-11 gap-2.5 px-3"
+            >
+              <Users2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+              จัดการทีม
+            </Button>
+          </div>
+        )}
       </nav>
 
       {/* Footer: User + Backup + Theme */}
@@ -185,7 +227,9 @@ export function Sidebar({
               <div className="text-[11px] font-semibold truncate" title={user.email ?? ""}>
                 {user.email}
               </div>
-              <div className="text-[9px] text-muted-foreground">Cloud sync</div>
+              <div className="text-[9px] text-muted-foreground">
+                {role ? ROLE_SHORT[role] : "Cloud sync"}
+              </div>
             </div>
             <Button
               variant="ghost"
