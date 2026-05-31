@@ -17,6 +17,9 @@ export const LEDGER_CATEGORY_LABELS: Record<LedgerCategory, string> = {
   overhead: "ค่าใช้จ่ายส่วนกลาง",
   tax: "ภาษี",
   refund: "คืนเงิน",
+  loan_received: "รับเงินกู้",
+  loan_principal: "จ่ายคืนเงินต้น",
+  loan_interest: "ดอกเบี้ยจ่าย",
   other: "อื่น ๆ",
 };
 
@@ -128,6 +131,72 @@ export function summarizeLedgerByMonth(
     m.cumulative = running;
   }
   return months;
+}
+
+// ====================================================
+// สำรองจ่าย / เบิกคืน (reimbursable advances)
+// ====================================================
+export interface ReimbursementSummary {
+  pendingCount: number;
+  pendingTotal: number;     // ยอดที่ยังค้างเบิกคืน
+  reimbursedCount: number;
+  reimbursedTotal: number;  // ยอดที่เบิกคืนแล้ว
+}
+
+/** เป็นรายการสำรองจ่ายที่ยังไม่เบิกคืน */
+export function isPendingReimbursement(e: LedgerEntry): boolean {
+  return !!e.reimbursable && e.reimbursementStatus !== "reimbursed";
+}
+
+/** สรุปยอดสำรองจ่าย: ค้างเบิก vs เบิกคืนแล้ว */
+export function summarizeReimbursements(entries: LedgerEntry[]): ReimbursementSummary {
+  const s: ReimbursementSummary = {
+    pendingCount: 0,
+    pendingTotal: 0,
+    reimbursedCount: 0,
+    reimbursedTotal: 0,
+  };
+  for (const e of entries) {
+    if (!e.reimbursable) continue;
+    if (e.reimbursementStatus === "reimbursed") {
+      s.reimbursedCount++;
+      s.reimbursedTotal += e.amount;
+    } else {
+      s.pendingCount++;
+      s.pendingTotal += e.amount;
+    }
+  }
+  return s;
+}
+
+/** กรองรายการตามเดือน (yyyy-MM) ตามวันที่เกิดรายการ */
+export function filterByMonth(entries: LedgerEntry[], monthKey: string): LedgerEntry[] {
+  return entries.filter((e) => {
+    if (!e.date) return false;
+    try {
+      const d = parseISO(e.date);
+      if (Number.isNaN(d.getTime())) return false;
+      return format(d, "yyyy-MM") === monthKey;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/** รายชื่อเดือน (yyyy-MM) ที่มีรายการ เรียงใหม่→เก่า — ใช้ทำตัวเลือก export */
+export function listMonthKeys(entries: LedgerEntry[]): string[] {
+  const keys = new Set<string>();
+  for (const e of entries) {
+    if (!e.date) continue;
+    try {
+      const d = parseISO(e.date);
+      if (Number.isNaN(d.getTime())) continue;
+      keys.add(format(d, "yyyy-MM"));
+    } catch {
+      // ignore
+    }
+  }
+  return [...keys].sort((a, b) => b.localeCompare(a));
 }
 
 export interface ReconcileRow {

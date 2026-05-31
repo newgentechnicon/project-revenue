@@ -1,6 +1,8 @@
 import ExcelJS from "exceljs";
-import { Project, PositionRate, OverheadItem, CompanyInfo } from "./types";
+import { format, parseISO } from "date-fns";
+import { Project, PositionRate, OverheadItem, CompanyInfo, LedgerEntry } from "./types";
 import { calculateProjectCosts } from "./calculations";
+import { LEDGER_CATEGORY_LABELS, filterByMonth } from "./ledger";
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -238,6 +240,168 @@ export async function exportQuotationToExcel(
   const blob = await workbookToBlob(wb);
   const fileSafe = (project.quotationNumber || project.name).replace(/[\\/:*?"<>|]/g, "_");
   downloadBlob(blob, `Quotation_${fileSafe}_${project.quotationDate}.xlsx`);
+}
+
+// =====================================================
+// Export รายงานค่าใช้จ่ายบริษัทรายเดือน (เงินออก) — ส่งสำนักงานบัญชี
+// Sheet 1: รายการค่าใช้จ่ายเรียงตามวันที่ (พร้อม VAT/หัก ณ ที่จ่าย/สำรองจ่าย)
+// Sheet 2: สรุปยอดแยกตามหมวด
+// =====================================================
+const REIMBURSE_STATUS_TH: Record<string, string> = {
+  pending: "รอเบิกคืน",
+  reimbursed: "เบิกคืนแล้ว",
+};
+
+const TH_MONTHS = [
+  "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+  "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม",
+];
+
+/** "2026-05" -> "พฤษภาคม 2569" (พ.ศ.) */
+function thaiMonthLabel(monthKey: string): string {
+  const [y, m] = monthKey.split("-").map(Number);
+  if (!y || !m) return monthKey;
+  return `${TH_MONTHS[m - 1]} ${y + 543}`;
+}
+
+export async function exportMonthlyExpensesToExcel(
+  ledger: LedgerEntry[],
+  monthKey: string,
+  companyInfo?: CompanyInfo
+) {
+  // โฟกัสเฉพาะเงินออก (รายการค่าใช้จ่ายบริษัท) ของเดือนนั้น เรียงตามวันที่
+  const entries = filterByMonth(ledger, monthKey)
+    .filter((e) => e.direction === "out")
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = companyInfo?.name || "Project Revenue";
+  wb.created = new Date();
+
+  const monthLabel = thaiMonthLabel(monthKey);
+
+  // ----- Sheet 1: รายการค่าใช้จ่าย -----
+  const sheet = wb.addWorksheet("ค่าใช้จ่าย");
+  sheet.columns = [
+    { header: "วันที่", key: "date", width: 12 },
+    { header: "หมวด", key: "category", width: 16 },
+    { header: "ผู้รับเงิน / คู่ค้า", key: "counterparty", width: 26 },
+    { header: "รายละเอียด", key: "description", width: 34 },
+    { header: "เลขที่อ้างอิง", key: "reference", width: 16 },
+    { header: "บัญชี/ธนาคาร", key: "account", width: 18 },
+    { header: "จำนวนเงิน", key: "amount", width: 15 },
+    { header: "VAT", key: "vat", width: 12 },
+    { header: "หัก ณ ที่จ่าย", key: "wht", width: 13 },
+    { header: "สำรองจ่ายโดย", key: "paidBy", width: 16 },
+    { header: "สถานะเบิกคืน", key: "reimburse", width: 14 },
+    { header: "slip", key: "slip", width: 7 },
+  ];
+
+  // ----- ชื่อบริษัท + หัวรายงาน (แทรกบนสุด) -----
+  sheet.spliceRows(1, 0, [], [], []);
+  const titleRow = sheet.getRow(1);
+  titleRow.getCell(1).value = companyInfo?.name || "รายงานค่าใช้จ่ายบริษัท";
+  titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: "FF1E40AF" } };
+  const subRow = sheet.getRow(2);
+  subRow.getCell(1).value = `รายงานค่าใช้จ่ายประจำเดือน ${monthLabel}`;
+  subRow.getCell(1).font = { bold: true, size: 11 };
+  if (companyInfo?.taxId) {
+    sheet.getRow(3).getCell(1).value = `เลขผู้เสียภาษี: ${companyInfo.taxId}`;
+    sheet.getRow(3).getCell(1).font = { size: 10, color: { argb: "FF6B7280" } };
+  }
+
+  const headerRow = sheet.getRow(4);
+  headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E40AF" } };
+  headerRow.alignment = { vertical: "middle", horizontal: "center" };
+
+  let totalAmount = 0;
+  let totalVat = 0;
+  let totalWht = 0;
+  for (const e of entries) {
+    let dateLabel = e.date;
+    try { dateLabel = format(parseISO(e.date), "dd/MM/yyyy"); } catch { /* keep raw */ }
+    totalAmount += e.amount;
+    totalVat += e.vatAmount ?? 0;
+    totalWht += e.whtAmount ?? 0;
+    sheet.addRow({
+      date: dateLabel,
+      category: LEDGER_CATEGORY_LABELS[e.category],
+      counterparty: e.counterparty ?? "",
+      description: e.description ?? "",
+      reference: e.reference ?? "",
+      account: e.account ?? "",
+      amount: e.amount,
+      vat: e.vatAmount ?? 0,
+      wht: e.whtAmount ?? 0,
+      paidBy: e.reimbursable ? (e.paidBy || "—") : "",
+      reimburse: e.reimbursable
+        ? REIMBURSE_STATUS_TH[e.reimbursementStatus ?? "pending"]
+        : "",
+      slip: e.attachments?.length ? e.attachments.length : "",
+    });
+  }
+
+  // แถวรวม
+  const totalRow = sheet.addRow({
+    category: `รวม ${entries.length} รายการ`,
+    amount: totalAmount,
+    vat: totalVat,
+    wht: totalWht,
+  });
+  totalRow.font = { bold: true };
+  totalRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF6FF" } };
+
+  for (const key of ["amount", "vat", "wht"]) {
+    sheet.getColumn(key).numFmt = '"฿"#,##0.00';
+  }
+  // ตรึงหัวตาราง (4 แถวบน)
+  sheet.views = [{ state: "frozen", ySplit: 4 }];
+
+  // ----- Sheet 2: สรุปตามหมวด -----
+  const sumSheet = wb.addWorksheet("สรุปตามหมวด");
+  sumSheet.columns = [
+    { header: "หมวด", key: "category", width: 22 },
+    { header: "จำนวนรายการ", key: "count", width: 14 },
+    { header: "ยอดรวม", key: "amount", width: 16 },
+    { header: "VAT", key: "vat", width: 14 },
+    { header: "หัก ณ ที่จ่าย", key: "wht", width: 14 },
+  ];
+  const sumHeader = sumSheet.getRow(1);
+  sumHeader.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  sumHeader.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E40AF" } };
+  sumHeader.alignment = { vertical: "middle", horizontal: "center" };
+
+  const byCat = new Map<string, { count: number; amount: number; vat: number; wht: number }>();
+  for (const e of entries) {
+    const label = LEDGER_CATEGORY_LABELS[e.category];
+    const agg = byCat.get(label) ?? { count: 0, amount: 0, vat: 0, wht: 0 };
+    agg.count++;
+    agg.amount += e.amount;
+    agg.vat += e.vatAmount ?? 0;
+    agg.wht += e.whtAmount ?? 0;
+    byCat.set(label, agg);
+  }
+  [...byCat.entries()]
+    .sort((a, b) => b[1].amount - a[1].amount)
+    .forEach(([category, agg]) => {
+      sumSheet.addRow({ category, count: agg.count, amount: agg.amount, vat: agg.vat, wht: agg.wht });
+    });
+  const sumTotal = sumSheet.addRow({
+    category: "รวมทั้งสิ้น",
+    count: entries.length,
+    amount: totalAmount,
+    vat: totalVat,
+    wht: totalWht,
+  });
+  sumTotal.font = { bold: true };
+  sumTotal.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF6FF" } };
+  for (const key of ["amount", "vat", "wht"]) {
+    sumSheet.getColumn(key).numFmt = '"฿"#,##0.00';
+  }
+
+  const blob = await workbookToBlob(wb);
+  downloadBlob(blob, `Expenses_${monthKey}.xlsx`);
 }
 
 // =====================================================

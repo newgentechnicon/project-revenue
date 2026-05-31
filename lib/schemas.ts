@@ -151,13 +151,47 @@ export const CommissionSchema = z.object({
 export type CommissionInput = z.infer<typeof CommissionSchema>;
 
 // ====================================================
+// Loans — เงินกู้ยืม (หนี้สิน) + การผ่อนชำระ
+// ====================================================
+export const LoanLenderTypeSchema = z.enum(["bank", "related_company", "individual", "other"]);
+export const LoanStatusSchema = z.enum(["active", "paid_off"]);
+
+export const RepaymentStatusSchema = z.enum(["pending", "paid"]);
+
+export const LoanRepaymentSchema = z.object({
+  id: z.string(),
+  date: z.string(),
+  principal: z.number().min(0),
+  interest: z.number().min(0),
+  status: RepaymentStatusSchema.optional(),
+  paidDate: z.string().optional(),
+  note: z.string().optional(),
+});
+
+export const LoanSchema = z.object({
+  id: z.string(),
+  lender: z.string(),
+  lenderType: LoanLenderTypeSchema,
+  principal: z.number().min(0),
+  annualInterestRate: z.number().min(0).max(100),
+  startDate: z.string(),
+  termMonths: z.number().int().min(1).optional(),
+  reference: z.string().optional(),
+  status: LoanStatusSchema,
+  notes: z.string().optional(),
+  repayments: z.array(LoanRepaymentSchema),
+});
+export type LoanInput = z.infer<typeof LoanSchema>;
+
+// ====================================================
 // Ledger — รายการเดินบัญชี (เงินเข้า/ออกจริง) + ไฟล์แนบ
 // ====================================================
 export const LedgerDirectionSchema = z.enum(["in", "out"]);
 
 export const LedgerCategorySchema = z.enum([
   "project_payment", "subscription", "commission",
-  "salary", "overhead", "tax", "refund", "other",
+  "salary", "overhead", "tax", "refund",
+  "loan_received", "loan_principal", "loan_interest", "other",
 ]);
 
 export const LedgerAttachmentSchema = z.object({
@@ -185,6 +219,10 @@ export const LedgerEntrySchema = z.object({
     .enum(["project", "subscription", "commission", "payroll", "overhead", "manual"])
     .optional(),
   sourceId: z.string().optional(),
+  reimbursable: z.boolean().optional(),
+  paidBy: z.string().optional(),
+  reimbursementStatus: z.enum(["pending", "reimbursed"]).optional(),
+  reimbursedDate: z.string().optional(),
   attachments: z.array(LedgerAttachmentSchema),
   ownerId: z.string().optional(),
   createdAt: z.string(),
@@ -199,6 +237,13 @@ export const ProjectPositionAllocationSchema = z.object({
   positionId: z.string(),
   mandays: z.number().min(0),
   customDailyRate: z.number().min(0).optional(),
+});
+
+export const ProjectModuleSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  allocations: z.array(ProjectPositionAllocationSchema),
 });
 
 export const DirectCostItemSchema = z.object({
@@ -287,7 +332,9 @@ export const ProjectSchema = z.object({
   validUntil: z.string().optional(),
   workingDaysPerMonth: z.number().int().min(1).max(31),
   durationMonths: z.number().min(0),
+  estimationMode: z.enum(["simple", "module"]).optional(),
   allocations: z.array(ProjectPositionAllocationSchema),
+  modules: z.array(ProjectModuleSchema).optional(),
   directCosts: z.array(DirectCostItemSchema),
   overheadAllocationMethod: OverheadAllocationMethodSchema,
   overheadAllocationValue: z.number().min(0),

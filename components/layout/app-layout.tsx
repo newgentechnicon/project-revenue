@@ -44,6 +44,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   else if (pathname.startsWith("/cashflow")) activeView = "cashflow";
   else if (pathname.startsWith("/subscriptions")) activeView = "subscriptions";
   else if (pathname.startsWith("/commissions")) activeView = "commissions";
+  else if (pathname.startsWith("/loans")) activeView = "loans";
   else if (pathname.startsWith("/ledger")) activeView = "ledger";
   else if (pathname.startsWith("/settings/team")) activeView = "team";
   else if (pathname.startsWith("/master-data/products")) activeView = "master_products";
@@ -70,6 +71,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       case "subscriptions": router.push("/subscriptions"); break;
       case "commissions": router.push("/commissions"); break;
       case "ledger": router.push("/ledger"); break;
+      case "loans": router.push("/loans"); break;
       case "team": router.push("/settings/team"); break;
       case "master_products": router.push("/master-data/products"); break;
       case "master_customers": router.push("/master-data/customers"); break;
@@ -107,7 +109,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     <AuthGate>
       <div className="flex min-h-screen bg-background text-foreground">
         {/* 1. Desktop Sidebar */}
-        <aside className="hidden lg:block w-[260px] shrink-0 h-screen sticky top-0 print:hidden">
+        <aside className="hidden lg:block w-[232px] shrink-0 h-screen sticky top-0 print:hidden">
           <Sidebar
             projects={projects}
             activeProjectId={activeProjectId}
@@ -125,7 +127,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         {/* 2. Mobile Sidebar Drawer */}
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-          <SheetContent side="left" className="p-0 w-[260px] bg-sidebar border-r border-sidebar-border print:hidden">
+          <SheetContent side="left" className="p-0 w-[232px] bg-sidebar border-r border-sidebar-border print:hidden">
             <Sidebar
               projects={projects}
               activeProjectId={activeProjectId}

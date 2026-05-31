@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useRef, useEffect } from "react";
-import { Project, PositionRate, OverheadItem, Employee, Subscription, Product, Commission, CommissionPayee } from "@/lib/types";
+import { Project, PositionRate, OverheadItem, Employee, Subscription, Product, Commission, CommissionPayee, Loan } from "@/lib/types";
 import {
   computeYearWindow,
   toBuddhistYear,
@@ -37,6 +37,7 @@ import {
 const CHART_COLORS = {
   inflow: "#10b981",   // emerald-500
   outflow: "#ef4444",  // red-500
+  loanOutflow: "#f59e0b", // amber-500 — ผ่อนเงินกู้ (แยกจากเงินออกอื่น)
   balance: "#4f46e5",  // indigo-600
   zero: "#94a3b8",     // slate-400
   border: "#e2e8f0",   // slate-200
@@ -70,6 +71,7 @@ interface CashflowViewProps {
   products?: Product[];
   commissions?: Commission[];
   commissionPayees?: CommissionPayee[];
+  loans?: Loan[];
   cashflowSettings: CashflowSettings;
   onUpdateCashflowSettings: (s: CashflowSettings) => void;
 }
@@ -83,6 +85,7 @@ export function CashflowView({
   products = [],
   commissions = [],
   commissionPayees = [],
+  loans = [],
   cashflowSettings,
   onUpdateCashflowSettings,
 }: CashflowViewProps) {
@@ -151,6 +154,7 @@ export function CashflowView({
           products,
           commissions,
           commissionPayees,
+          loans,
         }
       ),
     [
@@ -167,6 +171,7 @@ export function CashflowView({
       products,
       commissions,
       commissionPayees,
+      loans,
     ]
   );
 
@@ -183,8 +188,9 @@ export function CashflowView({
         products,
         commissions,
         commissionPayees,
+        loans,
       }),
-    [projects, positions, overheads, yearWindow, statusFilter, effectiveOpeningBalance, laborSource, employees, subscriptions, products, commissions, commissionPayees]
+    [projects, positions, overheads, yearWindow, statusFilter, effectiveOpeningBalance, laborSource, employees, subscriptions, products, commissions, commissionPayees, loans]
   );
 
   // Snapshot of payroll commitment for sub-card
@@ -209,6 +215,9 @@ export function CashflowView({
   );
 
   const hasAnyData = cashflowMonths.some((m) => m.inflow > 0 || m.outflow > 0);
+  const hasLoanOutflow = cashflowMonths.some((m) =>
+    m.outflowDetails.some((d) => d.category === "loan" && d.amount > 0)
+  );
 
   // Collect unique projects that contribute inflow this year, sorted by total
   // contribution desc → most prominent projects get first colors + legend slots.
@@ -235,10 +244,16 @@ export function CashflowView({
   const chartData = useMemo(
     () =>
       cashflowMonths.map((m) => {
+        // แยกเงินออกเป็น "ผ่อนเงินกู้" vs "อื่น ๆ" เพื่อ stack แยกสีในกราฟ
+        const loanOut = m.outflowDetails
+          .filter((d) => d.category === "loan")
+          .reduce((s, d) => s + d.amount, 0);
         const row: Record<string, number | string> = {
           month: m.monthLabel,
           inflow: m.inflow,
           outflow: -m.outflow,
+          outflow_loan: -loanOut,
+          outflow_other: -(m.outflow - loanOut),
           cumulative: m.cumulative,
           net: m.net,
         };
@@ -612,8 +627,13 @@ export function CashflowView({
               <span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-500" /> เงินเข้า
             </span>
             <span className="inline-flex items-center gap-1 mr-3">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-500" /> เงินออก
+              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-500" /> เงินออก{hasLoanOutflow ? "อื่น ๆ" : ""}
             </span>
+            {hasLoanOutflow && (
+              <span className="inline-flex items-center gap-1 mr-3">
+                <span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-500" /> ผ่อนเงินกู้
+              </span>
+            )}
             <span className="inline-flex items-center gap-1">
               <span className="inline-block w-3 h-0.5 bg-indigo-600" /> Cumulative balance
             </span>
@@ -659,10 +679,13 @@ export function CashflowView({
                   content={({ active, payload, label }) => {
                     if (!active || !payload || !payload.length) return null;
                     const inflowTotal = (payload.find((p) => p.dataKey === "inflow")?.value as number) ?? 0;
-                    const outflow = -((payload.find((p) => p.dataKey === "outflow")?.value as number) ?? 0);
                     const cumulative = (payload.find((p) => p.dataKey === "cumulative")?.value as number) ?? 0;
                     // Compute per-project breakdown from chartData row (in payload[0].payload)
                     const row = payload[0]?.payload as Record<string, number | string> | undefined;
+                    // outflow อ่านจาก row (เพราะแท่งอาจถูกแยกเป็น loan/other)
+                    const outflow = -((row?.outflow as number) ?? 0);
+                    const outflowLoan = -((row?.outflow_loan as number) ?? 0);
+                    const outflowOther = outflow - outflowLoan;
                     const perProject = projectInflowSeries
                       .map((s) => ({
                         name: s.name,
@@ -704,6 +727,24 @@ export function CashflowView({
                           <span className="text-muted-foreground">เงินออก:</span>
                           <span className="font-mono font-bold text-rose-600">−{formatTHB(outflow)}</span>
                         </div>
+                        {outflowLoan > 0 && (
+                          <div className="space-y-0.5 pl-2 border-l-2 border-amber-200 dark:border-amber-900">
+                            <div className="flex justify-between gap-2 text-[10.5px]">
+                              <span className="flex items-center gap-1 min-w-0">
+                                <span className="inline-block w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: CHART_COLORS.loanOutflow }} />
+                                <span className="text-muted-foreground">ผ่อนเงินกู้</span>
+                              </span>
+                              <span className="font-mono text-amber-600 shrink-0">{formatTHBCompact(outflowLoan)}</span>
+                            </div>
+                            <div className="flex justify-between gap-2 text-[10.5px]">
+                              <span className="flex items-center gap-1 min-w-0">
+                                <span className="inline-block w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: CHART_COLORS.outflow }} />
+                                <span className="text-muted-foreground">เงินออกอื่น ๆ</span>
+                              </span>
+                              <span className="font-mono text-rose-600 shrink-0">{formatTHBCompact(outflowOther)}</span>
+                            </div>
+                          </div>
+                        )}
                         <div className="flex justify-between border-t border-border pt-1">
                           <span className="text-muted-foreground">Net:</span>
                           <span className={`font-mono font-bold ${net < 0 ? "text-rose-600" : "text-emerald-600"}`}>
@@ -751,7 +792,14 @@ export function CashflowView({
                     );
                   })
                 )}
-                <Bar yAxisId="left" dataKey="outflow" name="เงินออก" fill={CHART_COLORS.outflow} radius={[0, 0, 4, 4]} barSize={22} fillOpacity={0.9} />
+                {hasLoanOutflow ? (
+                  <>
+                    <Bar yAxisId="left" dataKey="outflow_other" name="เงินออกอื่น ๆ" stackId="outflow" fill={CHART_COLORS.outflow} barSize={22} fillOpacity={0.9} />
+                    <Bar yAxisId="left" dataKey="outflow_loan" name="ผ่อนเงินกู้" stackId="outflow" fill={CHART_COLORS.loanOutflow} radius={[0, 0, 4, 4]} barSize={22} fillOpacity={0.95} />
+                  </>
+                ) : (
+                  <Bar yAxisId="left" dataKey="outflow" name="เงินออก" fill={CHART_COLORS.outflow} radius={[0, 0, 4, 4]} barSize={22} fillOpacity={0.9} />
+                )}
                 <Line
                   yAxisId="right"
                   type="monotone"
@@ -814,7 +862,22 @@ export function CashflowView({
                         {m.inflow > 0 ? `+${formatTHBCompact(m.inflow)}` : "—"}
                       </TableCell>
                       <TableCell className="text-right font-mono text-xs text-rose-600">
-                        {m.outflow > 0 ? `−${formatTHBCompact(m.outflow)}` : "—"}
+                        {(() => {
+                          if (m.outflow <= 0) return "—";
+                          const loanOut = m.outflowDetails
+                            .filter((d) => d.category === "loan")
+                            .reduce((s, d) => s + d.amount, 0);
+                          return (
+                            <div className="space-y-0.5">
+                              <div>−{formatTHBCompact(m.outflow)}</div>
+                              {loanOut > 0 && (
+                                <div className="text-[10px] text-amber-600" title="ส่วนที่เป็นการผ่อนเงินกู้">
+                                  ผ่อนกู้ −{formatTHBCompact(loanOut)}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="text-right">
                         <span className={`font-mono text-xs font-bold ${m.net < 0 ? "text-rose-600" : "text-emerald-600"}`}>
@@ -862,6 +925,12 @@ export function CashflowView({
                 <span className="font-semibold">วิธีคำนวณเงินออก:</span> ค่าแรง/direct/contingency กระจาย linear ตลอด project duration +
                 โสหุ้ยรายเดือนทุกเดือนใน window
               </p>
+              {hasLoanOutflow && (
+                <p>
+                  <span className="font-semibold text-amber-600">ผ่อนเงินกู้:</span> งวดผ่อน (ทั้งจ่ายแล้วและตามแผน) ลงเดือนตามวันครบกำหนด
+                  ส่วนเงินกู้รับเข้าลงเป็นเงินเข้า ณ วันรับเงิน — ดู/แก้ได้ที่เมนู “เงินกู้ยืม”
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
