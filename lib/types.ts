@@ -234,6 +234,81 @@ export interface Commission {
   notes?: string;
 }
 
+// ====================================================
+// Ledger — รายการเดินบัญชี (เงินเข้า/เงินออกจริง)
+// บันทึกกระแสเงินจริงที่เกิดขึ้น แยกจาก projection ใน cashflow.ts
+// (ใช้เทียบ "ประมาณการ vs จริง" ได้)
+// ====================================================
+export type LedgerDirection = 'in' | 'out';
+
+export type LedgerCategory =
+  | 'project_payment'   // รับเงินจากโครงการ
+  | 'subscription'      // รับเงินค่า subscription/license
+  | 'commission'        // จ่ายค่าคอม
+  | 'salary'            // เงินเดือน/ค่าแรง
+  | 'overhead'          // ค่าใช้จ่ายส่วนกลาง
+  | 'tax'               // ภาษี
+  | 'refund'            // คืนเงิน
+  | 'other';            // อื่น ๆ
+
+// ไฟล์แนบ (slip โอนเงิน/ใบเสร็จ) — เก็บไฟล์จริงใน Supabase Storage
+export interface LedgerAttachment {
+  id: string;
+  fileName: string;
+  // path ภายใน bucket "ledger-slips" เช่น {userId}/{ledgerId}/{uuid}-{name}
+  storagePath: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedAt: string;
+}
+
+export interface LedgerEntry {
+  id: string;
+  date: string;              // วันที่เกิดรายการ (ISO yyyy-mm-dd)
+  direction: LedgerDirection;
+  // จำนวนเงินสุทธิที่เคลื่อนไหวจริง (บาท)
+  amount: number;
+  vatAmount?: number;        // VAT แยก (ถ้ามี)
+  whtAmount?: number;        // หัก ณ ที่จ่าย (ถ้ามี)
+  category: LedgerCategory;
+  account?: string;          // บัญชี/ธนาคารที่ใช้
+  counterparty?: string;     // ลูกค้า/ผู้รับเงิน/คู่ค้า
+  reference?: string;        // เลขที่ใบเสร็จ/อ้างอิง
+  description?: string;
+  // ผูกกับแหล่งที่มาเพื่อ reconcile กับ projection (optional)
+  sourceType?: 'project' | 'subscription' | 'commission' | 'payroll' | 'overhead' | 'manual';
+  sourceId?: string;
+  attachments: LedgerAttachment[];
+  // ผู้บันทึก — เตรียมไว้สำหรับ RBAC (เฟส B); เฟส A ใช้ user id ปัจจุบัน
+  ownerId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ====================================================
+// Organization & Membership (RBAC — เฟส B)
+// org เดียวร่วมกัน: ทีมแชร์ข้อมูล + คุมสิทธิ์ตาม role และ data_scope
+// ====================================================
+export type OrgRole = 'owner' | 'admin' | 'accountant' | 'sales' | 'viewer';
+
+// all = เห็นข้อมูลทั้งหมดของ org, own = เห็นเฉพาะข้อมูลที่ตัวเองสร้าง
+export type DataScope = 'all' | 'own';
+
+export interface Organization {
+  id: string;
+  name: string;
+}
+
+export interface Membership {
+  orgId: string;
+  userId: string;
+  role: OrgRole;
+  dataScope: DataScope;
+  active: boolean;
+  // อีเมล (จาก auth) — เติมฝั่ง client เพื่อแสดงผล (ไม่ได้เก็บใน memberships)
+  email?: string;
+}
+
 export type ScenarioId = 'best' | 'realistic' | 'worst';
 
 export interface Scenario {

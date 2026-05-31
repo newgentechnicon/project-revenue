@@ -18,6 +18,7 @@ import {
   ArrowUpDown, Calendar, FileSpreadsheet, BarChart3, List, GitCompareArrows,
 } from "lucide-react";
 import { toast } from "sonner";
+import { EditGate } from "@/components/project-cost/edit-gate";
 import { exportProjectsListToExcel } from "@/lib/excel-export";
 import { CompanyAnalytics } from "./company-analytics";
 import { ProjectsComparison } from "./projects-comparison";
@@ -277,11 +278,13 @@ export function ProjectsListView({
             <FileSpreadsheet className="h-4 w-4" /> Export Excel
           </Button>
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 font-semibold">
-              <Plus className="h-4 w-4" /> สร้างโครงการใหม่
-            </Button>
-          </DialogTrigger>
+          <EditGate>
+            <DialogTrigger asChild>
+              <Button className="gap-2 font-semibold">
+                <Plus className="h-4 w-4" /> สร้างโครงการใหม่
+              </Button>
+            </DialogTrigger>
+          </EditGate>
           <DialogContent className="sm:max-w-[480px]">
             <form onSubmit={handleCreateSubmit}>
               <DialogHeader>
@@ -548,33 +551,35 @@ export function ProjectsListView({
                             >
                               <FolderOpen className="h-3.5 w-3.5" />
                             </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => handleStartEdit(project)}
-                              className="h-7 w-7"
-                              title="แก้ไข"
-                            >
-                              <Edit2 className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => handleDuplicate(project)}
-                              className="h-7 w-7"
-                              title="คัดลอก"
-                            >
-                              <Copy className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => handleDelete(project)}
-                              className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                              title="ลบ"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                            <EditGate>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => handleStartEdit(project)}
+                                className="h-7 w-7"
+                                title="แก้ไข"
+                              >
+                                <Edit2 className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => handleDuplicate(project)}
+                                className="h-7 w-7"
+                                title="คัดลอก"
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => handleDelete(project)}
+                                className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                title="ลบ"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </EditGate>
                           </div>
                         </TableCell>
                       </TableRow>

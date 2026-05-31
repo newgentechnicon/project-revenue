@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Trash2, Edit2, Landmark } from "lucide-react";
+import { EditGate } from "@/components/project-cost/edit-gate";
 import { toast } from "sonner";
 
 interface MasterOverheadsViewProps {
@@ -127,11 +128,13 @@ export function MasterOverheadsView({
         </div>
 
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 font-semibold">
-              <Plus className="h-4 w-4" /> เพิ่มค่าใช้จ่ายหลัก
-            </Button>
-          </DialogTrigger>
+          <EditGate>
+            <DialogTrigger asChild>
+              <Button className="gap-2 font-semibold">
+                <Plus className="h-4 w-4" /> เพิ่มค่าใช้จ่ายหลัก
+              </Button>
+            </DialogTrigger>
+          </EditGate>
           <DialogContent className="sm:max-w-[425px]">
             <form onSubmit={handleAddSubmit}>
               <DialogHeader>
@@ -321,24 +324,26 @@ export function MasterOverheadsView({
                           ฿{formatNumber(monthlyEquivalent)}
                         </TableCell>
                         <TableCell className="text-center">
-                          <div className="flex justify-center gap-1.5">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => handleStartEdit(item)}
-                              className="h-7 w-7"
-                            >
-                              <Edit2 className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => handleDeleteClick(item.id, item.name)}
-                              className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
+                          <EditGate fallback={<span className="text-muted-foreground/40">—</span>}>
+                            <div className="flex justify-center gap-1.5">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => handleStartEdit(item)}
+                                className="h-7 w-7"
+                              >
+                                <Edit2 className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => handleDeleteClick(item.id, item.name)}
+                                className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </EditGate>
                         </TableCell>
                       </TableRow>
                     );
