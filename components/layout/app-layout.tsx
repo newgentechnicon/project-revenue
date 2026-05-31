@@ -8,6 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { AuthGate } from "@/components/auth/auth-gate";
+import { ReadOnlyBanner, FeatureScopeProvider } from "@/components/project-cost/edit-gate";
+import { useOrg } from "@/hooks/use-org";
+import { VIEW_FEATURE } from "@/lib/features";
+import { Lock } from "lucide-react";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -30,6 +34,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
+  const { canView, loading: orgLoading } = useOrg();
 
   // Determine activeView from pathname for Sidebar highlighting
   let activeView: SidebarViewId = "projects_list";
@@ -39,6 +44,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   else if (pathname.startsWith("/cashflow")) activeView = "cashflow";
   else if (pathname.startsWith("/subscriptions")) activeView = "subscriptions";
   else if (pathname.startsWith("/commissions")) activeView = "commissions";
+  else if (pathname.startsWith("/ledger")) activeView = "ledger";
+  else if (pathname.startsWith("/settings/team")) activeView = "team";
   else if (pathname.startsWith("/master-data/products")) activeView = "master_products";
   else if (pathname.startsWith("/master-data/customers")) activeView = "master_customers";
   else if (pathname.startsWith("/master-data/commission-payees")) activeView = "master_commission_payees";
@@ -62,6 +69,8 @@ export function AppLayout({ children }: AppLayoutProps) {
       case "cashflow": router.push("/cashflow"); break;
       case "subscriptions": router.push("/subscriptions"); break;
       case "commissions": router.push("/commissions"); break;
+      case "ledger": router.push("/ledger"); break;
+      case "team": router.push("/settings/team"); break;
       case "master_products": router.push("/master-data/products"); break;
       case "master_customers": router.push("/master-data/customers"); break;
       case "master_commission_payees": router.push("/master-data/commission-payees"); break;
@@ -155,9 +164,24 @@ export function AppLayout({ children }: AppLayoutProps) {
           </header>
 
           <div className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto w-full print:p-0 print:overflow-visible">
-            <div className="max-w-7xl mx-auto space-y-6">
-              {children}
-            </div>
+            <FeatureScopeProvider feature={VIEW_FEATURE[activeView] ?? null}>
+              <div className="max-w-7xl mx-auto space-y-6">
+                <ReadOnlyBanner />
+                {VIEW_FEATURE[activeView] && !orgLoading && !canView(VIEW_FEATURE[activeView]) ? (
+                  <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                      <Lock className="h-6 w-6" />
+                    </div>
+                    <div className="font-semibold">ไม่มีสิทธิ์เข้าถึงเมนูนี้</div>
+                    <div className="text-sm text-muted-foreground max-w-sm">
+                      บัญชีของคุณไม่ได้รับสิทธิ์ให้เข้าถึงส่วนนี้ — ติดต่อผู้ดูแลเพื่อขอเปิดสิทธิ์
+                    </div>
+                  </div>
+                ) : (
+                  children
+                )}
+              </div>
+            </FeatureScopeProvider>
           </div>
         </main>
       </div>

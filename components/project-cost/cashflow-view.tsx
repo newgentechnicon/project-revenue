@@ -9,6 +9,7 @@ import {
 } from "@/lib/resource-planning";
 import { computeCashflow, summarizeCashflow, employeeMonthlyCost, isEmployeeActiveInMonth, computeChainedOpeningBalance, LaborCostSource } from "@/lib/cashflow";
 import { CashflowSettings } from "@/hooks/use-cashflow-settings";
+import { EditGate } from "@/components/project-cost/edit-gate";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -459,12 +460,14 @@ export function CashflowView({
               setSettingsAnchorAmount(cashflowSettings.anchorAmount);
             }
           }}>
-            <DialogTrigger asChild>
-              <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs">
-                <Settings className="h-3.5 w-3.5" />
-                ตั้งค่ายอดยกมา
-              </Button>
-            </DialogTrigger>
+            <EditGate admin>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs">
+                  <Settings className="h-3.5 w-3.5" />
+                  ตั้งค่ายอดยกมา
+                </Button>
+              </DialogTrigger>
+            </EditGate>
             <DialogContent className="sm:max-w-[480px]">
               <DialogHeader>
                 <DialogTitle>ตั้งค่ายอดเงินสดต้นทุน</DialogTitle>

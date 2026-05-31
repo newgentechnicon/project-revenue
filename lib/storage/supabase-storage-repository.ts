@@ -16,6 +16,7 @@ const MULTI_ROW_TABLES: Record<string, string> = {
   cost_est_customers: "customers",
   cost_est_commission_payees: "commission_payees",
   cost_est_commissions: "commissions",
+  cost_est_ledger: "ledger",
 };
 
 const SINGLETON_TABLES: Record<string, string> = {
@@ -151,7 +152,9 @@ export class SupabaseStorageRepository implements StorageRepository {
       return this.readMultiRow(MULTI_ROW_TABLES[key], userId);
     }
     if (SINGLETON_TABLES[key]) {
-      return this.readSingleton(SINGLETON_TABLES[key], userId);
+      const orgId = await this.getOrgId();
+      if (!orgId) return null;
+      return this.readSingleton(SINGLETON_TABLES[key], orgId);
     }
     // Unknown key → no remote storage
     return null;
@@ -166,7 +169,9 @@ export class SupabaseStorageRepository implements StorageRepository {
       return;
     }
     if (SINGLETON_TABLES[key]) {
-      await this.writeSingleton(SINGLETON_TABLES[key], userId, value);
+      const orgId = await this.getOrgId();
+      if (!orgId) return;
+      await this.writeSingleton(SINGLETON_TABLES[key], orgId, userId, value);
       return;
     }
   }
@@ -182,10 +187,10 @@ export class SupabaseStorageRepository implements StorageRepository {
       return;
     }
 
+    // ไม่กรอง user_id — RLS อนุญาตลบตาม org + data_scope (admin scope=all ลบของทีมได้)
     const { error } = await this.supabase
       .from(table)
       .delete()
-      .eq("user_id", userId)
       .eq("id", id);
 
     if (error) {
@@ -209,7 +214,9 @@ export class SupabaseStorageRepository implements StorageRepository {
       return;
     }
     if (SINGLETON_TABLES[key]) {
-      await this.writeSingleton(SINGLETON_TABLES[key], userId, value);
+      const orgId = await this.getOrgId();
+      if (!orgId) return;
+      await this.writeSingleton(SINGLETON_TABLES[key], orgId, userId, value);
       return;
     }
   }
@@ -218,12 +225,16 @@ export class SupabaseStorageRepository implements StorageRepository {
     const userId = await this.getUserId();
     if (!userId) return;
 
+    // ไม่กรอง user_id — RLS เป็นตัวจำกัดขอบเขต (org + data_scope)
     if (MULTI_ROW_TABLES[key]) {
-      await this.supabase.from(MULTI_ROW_TABLES[key]).delete().eq("user_id", userId);
+      const { error } = await this.supabase.from(MULTI_ROW_TABLES[key]).delete().not("id", "is", null);
+      if (error) console.error(`[supabase-storage] remove ${key} failed:`, describeError(error));
       return;
     }
     if (SINGLETON_TABLES[key]) {
-      await this.supabase.from(SINGLETON_TABLES[key]).delete().eq("user_id", userId);
+      const orgId = await this.getOrgId();
+      if (!orgId) return;
+      await this.supabase.from(SINGLETON_TABLES[key]).delete().eq("org_id", orgId);
     }
   }
 
@@ -237,13 +248,26 @@ export class SupabaseStorageRepository implements StorageRepository {
     return data.user?.id ?? null;
   }
 
-  /** Read multi-row table → JSON envelope { version, data: [...] } */
+  /**
+   * Org ปัจจุบันของผู้ใช้ (ผ่าน RPC current_org_id ที่ bypass RLS)
+   * ใช้กับ singleton tables ที่ผูกกับ org แทน user
+   */
+  private async getOrgId(): Promise<string | null> {
+    const { data, error } = await this.supabase.rpc("current_org_id");
+    if (error) {
+      console.error(`[supabase-storage] getOrgId failed:`, describeError(error));
+      return null;
+    }
+    return (data as string) ?? null;
+  }
+
+  /** Read multi-row table → JSON envelope { version, data: [...] }
+   *  ไม่กรอง user_id แล้ว — RLS เป็นตัวคัดข้อมูลตาม org + data_scope */
   private async readMultiRow(table: string, userId: string): Promise<string> {
     console.log(`[supabase-storage] readMultiRow table=${table} userId=${userId}`);
     const { data, error } = await this.supabase
       .from(table)
       .select("data, created_at")
-      .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -342,8 +366,7 @@ export class SupabaseStorageRepository implements StorageRepository {
     // 2. Fetch server-side ids and delete the ones not in the new set
     const { data: existingRows, error: fetchError } = await this.supabase
       .from(table)
-      .select("id")
-      .eq("user_id", userId);
+      .select("id");
 
     if (fetchError) {
       console.error(`[supabase-storage] replaceAll fetch ${table} failed:`, describeError(fetchError));
@@ -358,7 +381,6 @@ export class SupabaseStorageRepository implements StorageRepository {
     const { error: deleteError } = await this.supabase
       .from(table)
       .delete()
-      .eq("user_id", userId)
       .in("id", idsToDelete);
 
     if (deleteError) {
@@ -366,12 +388,12 @@ export class SupabaseStorageRepository implements StorageRepository {
     }
   }
 
-  /** Read singleton row → JSON envelope */
-  private async readSingleton(table: string, userId: string): Promise<string | null> {
+  /** Read singleton row → JSON envelope (ผูกกับ org แทน user) */
+  private async readSingleton(table: string, orgId: string): Promise<string | null> {
     const { data, error } = await this.supabase
       .from(table)
       .select("data")
-      .eq("user_id", userId)
+      .eq("org_id", orgId)
       .maybeSingle();
 
     if (error) {
@@ -389,8 +411,8 @@ export class SupabaseStorageRepository implements StorageRepository {
     return wrapEnvelope(data.data);
   }
 
-  /** Write singleton: upsert by user_id */
-  private async writeSingleton(table: string, userId: string, value: string): Promise<void> {
+  /** Write singleton: upsert by org_id (แชร์ระดับ org) — user_id = ผู้แก้ล่าสุด */
+  private async writeSingleton(table: string, orgId: string, userId: string, value: string): Promise<void> {
     const envelope = parseEnvelope(value);
     if (!envelope) {
       console.warn(`[supabase-storage] write ${table}: invalid envelope, skip`);
@@ -398,8 +420,8 @@ export class SupabaseStorageRepository implements StorageRepository {
     }
 
     const { error } = await this.supabase.from(table).upsert(
-      { user_id: userId, data: envelope.data },
-      { onConflict: "user_id" }
+      { org_id: orgId, user_id: userId, data: envelope.data },
+      { onConflict: "org_id" }
     );
 
     if (error) {

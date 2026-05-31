@@ -3,6 +3,7 @@ import { Geist_Mono, Noto_Sans_Thai } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/hooks/use-auth";
+import { OrgProvider } from "@/hooks/use-org";
 import { AppStateProvider } from "@/lib/context/app-state-context";
 import { cn } from "@/lib/utils";
 import { Toaster } from "sonner";
@@ -33,10 +34,12 @@ export default function RootLayout({
       <body>
         <ThemeProvider>
           <AuthProvider>
-            <AppStateProvider>
-              {children}
-              <Toaster richColors position="top-right" closeButton />
-            </AppStateProvider>
+            <OrgProvider>
+              <AppStateProvider>
+                {children}
+                <Toaster richColors position="top-right" closeButton />
+              </AppStateProvider>
+            </OrgProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>
