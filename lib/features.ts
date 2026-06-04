@@ -13,6 +13,7 @@ export type FeatureKey =
   | "subscriptions"
   | "commissions"
   | "ledger"
+  | "loans"
   | "cashflow"
   | "analytics"
   | "customers"
@@ -36,6 +37,7 @@ export const FEATURES: FeatureDef[] = [
   { key: "subscriptions", label: "รายรับประจำ", group: "รายรับ & การเงิน" },
   { key: "commissions", label: "ค่าคอมมิชชั่น", group: "รายรับ & การเงิน" },
   { key: "ledger", label: "รายการเดินบัญชี", group: "รายรับ & การเงิน" },
+  { key: "loans", label: "เงินกู้ยืม", group: "รายรับ & การเงิน" },
   { key: "cashflow", label: "Cashflow", group: "รายรับ & การเงิน" },
   { key: "analytics", label: "Company Analytics", group: "รายรับ & การเงิน" },
   { key: "customers", label: "ลูกค้า", group: "ข้อมูลหลัก" },
@@ -60,6 +62,7 @@ export const VIEW_FEATURE: Record<string, FeatureKey> = {
   subscriptions: "subscriptions",
   commissions: "commissions",
   ledger: "ledger",
+  loans: "loans",
   master_customers: "customers",
   master_products: "products",
   master_commission_payees: "commission_payees",

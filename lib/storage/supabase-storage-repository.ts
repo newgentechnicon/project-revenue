@@ -17,6 +17,7 @@ const MULTI_ROW_TABLES: Record<string, string> = {
   cost_est_commission_payees: "commission_payees",
   cost_est_commissions: "commissions",
   cost_est_ledger: "ledger",
+  cost_est_loans: "loans",
 };
 
 const SINGLETON_TABLES: Record<string, string> = {

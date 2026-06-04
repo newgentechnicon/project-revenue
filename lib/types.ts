@@ -53,6 +53,16 @@ export interface ProjectPositionAllocation {
   customDailyRate?: number;
 }
 
+// โมดูลงาน — ใช้เมื่อ estimationMode = 'module'
+// แบ่งโปรเจกต์เป็นโมดูลย่อย (เช่น Auth, Report, Payment) แล้วประเมิน mandays/ตำแหน่ง ต่อโมดูล
+// project.allocations = ผลรวม mandays ของทุกโมดูล (สร้างอัตโนมัติ) เพื่อให้ส่วนคำนวณเดิมใช้ได้ไม่ต้องแก้
+export interface ProjectModule {
+  id: string;
+  name: string;
+  description?: string;
+  allocations: ProjectPositionAllocation[];
+}
+
 export interface DirectCostItem {
   id: string;
   name: string;
@@ -235,6 +245,43 @@ export interface Commission {
 }
 
 // ====================================================
+// Loans — เงินกู้ยืม (หนี้สิน) จากธนาคาร/บริษัทเพื่อน/บุคคล
+// บันทึกเงินต้น + อัตราดอกเบี้ย + การผ่อนชำระแต่ละงวด (แยกเงินต้น/ดอก)
+// เพื่อติดตาม "ยอดหนี้คงเหลือ" — แยกจาก ledger ที่บันทึกเงินสดเข้า/ออกจริง
+// ====================================================
+export type LoanLenderType = 'bank' | 'related_company' | 'individual' | 'other';
+export type LoanStatus = 'active' | 'paid_off';
+
+// สถานะการจ่ายของงวดผ่อน — ทำตารางล่วงหน้าแล้วค่อยกดว่าจ่ายแล้ว
+// (รายการเก่าที่ไม่มี status ถือว่า 'paid' เพื่อ backward-compat)
+export type RepaymentStatus = 'pending' | 'paid';
+
+// การผ่อนชำระ 1 งวด — แยกส่วนเงินต้นกับดอกเบี้ย + สถานะจ่ายแล้ว/ยัง
+export interface LoanRepayment {
+  id: string;
+  date: string;              // วันครบกำหนด/วันนัดจ่าย (ISO yyyy-mm-dd)
+  principal: number;         // ส่วนที่ตัดเงินต้น
+  interest: number;          // ส่วนดอกเบี้ย
+  status?: RepaymentStatus;  // 'pending' = ยังไม่จ่าย, 'paid'/undefined = จ่ายแล้ว
+  paidDate?: string;         // วันที่จ่ายจริง (เมื่อ status = 'paid')
+  note?: string;
+}
+
+export interface Loan {
+  id: string;
+  lender: string;                  // ชื่อเจ้าหนี้/ผู้ให้กู้
+  lenderType: LoanLenderType;      // ประเภทเจ้าหนี้
+  principal: number;               // เงินต้นที่กู้มา (ยอดตั้งต้น)
+  annualInterestRate: number;      // อัตราดอกเบี้ยต่อปี (%)
+  startDate: string;               // วันที่รับเงินกู้ (ISO yyyy-mm-dd)
+  termMonths?: number;             // ระยะเวลา (เดือน) — optional
+  reference?: string;              // เลขที่สัญญา/อ้างอิง
+  status: LoanStatus;
+  notes?: string;
+  repayments: LoanRepayment[];     // ประวัติการผ่อนชำระ
+}
+
+// ====================================================
 // Ledger — รายการเดินบัญชี (เงินเข้า/เงินออกจริง)
 // บันทึกกระแสเงินจริงที่เกิดขึ้น แยกจาก projection ใน cashflow.ts
 // (ใช้เทียบ "ประมาณการ vs จริง" ได้)
@@ -249,6 +296,9 @@ export type LedgerCategory =
   | 'overhead'          // ค่าใช้จ่ายส่วนกลาง
   | 'tax'               // ภาษี
   | 'refund'            // คืนเงิน
+  | 'loan_received'     // รับเงินกู้เข้ามา
+  | 'loan_principal'    // จ่ายคืนเงินต้น
+  | 'loan_interest'     // ดอกเบี้ยจ่าย
   | 'other';            // อื่น ๆ
 
 // ไฟล์แนบ (slip โอนเงิน/ใบเสร็จ) — เก็บไฟล์จริงใน Supabase Storage
@@ -278,6 +328,12 @@ export interface LedgerEntry {
   // ผูกกับแหล่งที่มาเพื่อ reconcile กับ projection (optional)
   sourceType?: 'project' | 'subscription' | 'commission' | 'payroll' | 'overhead' | 'manual';
   sourceId?: string;
+  // เคสสำรองจ่าย: จ่ายเงินส่วนตัวออกไปก่อนแทนบริษัท แล้วค่อยเบิกคืน
+  // (ใช้กับรายการเงินออกเป็นหลัก) — บันทึกเป็นรายการเดียว แล้วติดธง + สถานะเบิกคืน
+  reimbursable?: boolean;                          // true = เป็นรายการสำรองจ่าย รอเบิกคืนบริษัท
+  paidBy?: string;                                 // ผู้สำรองจ่าย (ใครออกเงินส่วนตัวก่อน)
+  reimbursementStatus?: 'pending' | 'reimbursed';  // รอเบิก / เบิกคืนแล้ว
+  reimbursedDate?: string;                         // วันที่บริษัทจ่ายคืน (ISO yyyy-mm-dd)
   attachments: LedgerAttachment[];
   // ผู้บันทึก — เตรียมไว้สำหรับ RBAC (เฟส B); เฟส A ใช้ user id ปัจจุบัน
   ownerId?: string;
@@ -338,7 +394,12 @@ export interface Project {
   validUntil?: string;
   workingDaysPerMonth: number;
   durationMonths: number;
+  // โหมดประเมินค่าแรง: 'simple' = ตารางเดียวทั้งโครงการ (default), 'module' = แบ่งราย Module
+  estimationMode?: 'simple' | 'module';
+  // allocations = ผลรวมที่ใช้คำนวณจริง (โหมด module จะ rebuild จากผลรวมของ modules อัตโนมัติ)
   allocations: ProjectPositionAllocation[];
+  // โมดูลงาน — เก็บไว้เพื่อแก้ไขในโหมด module (downstream อ่าน allocations ที่ถูกรวมแล้ว)
+  modules?: ProjectModule[];
   directCosts: DirectCostItem[];
   overheadAllocationMethod: 'proportional' | 'percentage' | 'fixed';
   overheadAllocationValue: number;
