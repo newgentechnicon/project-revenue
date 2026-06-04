@@ -23,7 +23,6 @@ interface QuotationCostTableProps {
 
 export function QuotationCostTable({ project, calculations, showDetailedLabor }: QuotationCostTableProps) {
   const {
-    laborCost,
     directCost,
     allocatedOverhead,
     contingencyAmount,
@@ -74,15 +73,15 @@ export function QuotationCostTable({ project, calculations, showDetailedLabor }:
             ) : (
               <tr className="border-b border-slate-100 text-slate-600">
                 <td className="py-3 pl-2">
-                  <div className="font-semibold text-slate-800">ค่าใช้จ่ายด้านทรัพยากรบุคคล (Total Labor Cost)</div>
+                  <div className="font-semibold text-slate-800">ค่าพัฒนาและดำเนินการระบบซอฟต์แวร์ (Software Development &amp; Services)</div>
                   <div className="text-xs text-slate-400">
-                    รวมทีมพัฒนาซอฟต์แวร์ นักพัฒนา ดีไซเนอร์ และผู้ประสานงานโครงการ
+                    ค่าออกแบบ พัฒนา ทดสอบ และบริหารโครงการโดยทีมงานครบวงจร (รวมค่าดำเนินงานทั้งหมด)
                   </div>
                 </td>
                 <td className="py-3 text-center font-mono">{calculations.totalProjectMandays}</td>
                 <td className="py-3 text-right text-slate-400">-</td>
                 <td className="py-3 text-right font-semibold font-mono text-slate-800">
-                  ฿{formatNumber(laborCost)}
+                  ฿{formatNumber(priceBeforeTax - directCost)}
                 </td>
               </tr>
             )}
@@ -104,6 +103,8 @@ export function QuotationCostTable({ project, calculations, showDetailedLabor }:
               </tr>
             )}
 
+            {showDetailedLabor && (
+              <>
             {/* 3. Overhead */}
             <tr className="border-b border-slate-100 text-slate-600">
               <td className="py-3 pl-2">
@@ -175,6 +176,8 @@ export function QuotationCostTable({ project, calculations, showDetailedLabor }:
                 <td className="py-3 text-right text-slate-400">-</td>
                 <td className="py-3 text-right font-semibold font-mono text-slate-800">฿{formatNumber(markupAmount)}</td>
               </tr>
+            )}
+              </>
             )}
           </tbody>
         </table>

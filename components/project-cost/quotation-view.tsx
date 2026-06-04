@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { QuotationToolbar } from "./quotation/quotation-toolbar";
 import { QuotationHeader } from "./quotation/quotation-header";
 import { QuotationCostTable } from "./quotation/quotation-cost-table";
+import { QuotationModulesSection } from "./quotation/quotation-modules-section";
 import { QuotationPhasesSection } from "./quotation/quotation-phases-section";
 import { QuotationPaymentSchedule } from "./quotation/quotation-payment-schedule";
 import { QuotationSignature } from "./quotation/quotation-signature";
@@ -59,6 +60,12 @@ export function QuotationView({
             project={project}
             calculations={calculations}
             showDetailedLabor={showDetailedLabor}
+          />
+
+          <QuotationModulesSection
+            project={project}
+            positions={positions}
+            calculations={calculations}
           />
 
           <QuotationPhasesSection project={project} calculations={calculations} />

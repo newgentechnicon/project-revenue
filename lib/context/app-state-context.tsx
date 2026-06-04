@@ -11,19 +11,20 @@ import { useCustomers } from "@/hooks/use-customers";
 import { useCommissionPayees } from "@/hooks/use-commission-payees";
 import { useCommissions } from "@/hooks/use-commissions";
 import { useLedger } from "@/hooks/use-ledger";
+import { useLoans } from "@/hooks/use-loans";
 import { useCashflowSettings, CashflowSettings } from "@/hooks/use-cashflow-settings";
 import { useCompanyInfo, DEFAULT_COMPANY_INFO } from "@/hooks/use-company-info";
 import { useActiveProject } from "@/hooks/use-active-project";
 import {
   ProjectSchema, PositionRateSchema, OverheadItemSchema, EmployeeSchema, CompanyInfoSchema,
   ProductSchema, SubscriptionSchema, CustomerSchema,
-  CommissionPayeeSchema, CommissionSchema, LedgerEntrySchema,
+  CommissionPayeeSchema, CommissionSchema, LedgerEntrySchema, LoanSchema,
   safeParse, safeParseArray,
 } from "@/lib/schemas";
 import {
   migrateProjectChain, migratePositionChain, migrateOverheadChain,
 } from "@/lib/migrations";
-import { Project, PositionRate, OverheadItem, Employee, CompanyInfo, Product, Subscription, Customer, CommissionPayee, Commission, LedgerEntry } from "@/lib/types";
+import { Project, PositionRate, OverheadItem, Employee, CompanyInfo, Product, Subscription, Customer, CommissionPayee, Commission, LedgerEntry, Loan } from "@/lib/types";
 import { extractCustomersFromRecords, toSubscriptionCustomer, toClientInfo } from "@/lib/customers";
 
 interface AppStateContextType {
@@ -86,6 +87,11 @@ interface AppStateContextType {
   addLedgerEntry: (entry: Omit<LedgerEntry, "createdAt" | "updatedAt" | "ownerId">) => void;
   updateLedgerEntry: (updated: LedgerEntry) => void;
   deleteLedgerEntry: (id: string) => void;
+  // Loans CRUD (เงินกู้ยืม — หนี้สิน)
+  loans: Loan[];
+  addLoan: (item: Omit<Loan, "id">) => void;
+  updateLoan: (updated: Loan) => void;
+  deleteLoan: (id: string) => void;
   // Cashflow settings (anchor for balance carryover)
   cashflowSettings: CashflowSettings;
   setCashflowSettings: (s: CashflowSettings) => void;
@@ -134,6 +140,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const ledgerApi = useLedger();
   const { ledger, replaceAllLedger } = ledgerApi;
+
+  const loansApi = useLoans();
+  const { loans, replaceAllLoans } = loansApi;
 
   const { cashflowSettings, setCashflowSettings, hydrated: cashflowHydrated } = useCashflowSettings();
 
@@ -255,14 +264,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [subscriptions, projects, customers, replaceAllCustomers, subscriptionsApi, updateProject]);
 
   const exportData = useCallback(() => {
-    const dataStr = JSON.stringify({ projects, positions, overheads, employees, products, subscriptions, customers, commissionPayees, commissions, ledger, companyInfo, cashflowSettings });
+    const dataStr = JSON.stringify({ projects, positions, overheads, employees, products, subscriptions, customers, commissionPayees, commissions, ledger, loans, companyInfo, cashflowSettings });
     const dataUri = "data:application/json;charset=utf-8," + encodeURIComponent(dataStr);
     const filename = `software_cost_estimation_backup_${new Date().toISOString().split("T")[0]}.json`;
     const link = document.createElement("a");
     link.setAttribute("href", dataUri);
     link.setAttribute("download", filename);
     link.click();
-  }, [projects, positions, overheads, employees, products, subscriptions, customers, commissionPayees, commissions, ledger, companyInfo, cashflowSettings]);
+  }, [projects, positions, overheads, employees, products, subscriptions, customers, commissionPayees, commissions, ledger, loans, companyInfo, cashflowSettings]);
 
   const importData = useCallback(
     (jsonDataStr: string): boolean => {
@@ -309,6 +318,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         if (Array.isArray(parsed.ledger)) {
           replaceAllLedger(safeParseArray(LedgerEntrySchema, parsed.ledger, "import.ledger"));
         }
+        if (Array.isArray(parsed.loans)) {
+          replaceAllLoans(safeParseArray(LoanSchema, parsed.loans, "import.loans"));
+        }
         if (parsed.companyInfo) {
           setCompanyInfo(
             safeParse(CompanyInfoSchema, parsed.companyInfo, DEFAULT_COMPANY_INFO, "import.companyInfo")
@@ -323,10 +335,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
     },
-    [replaceAllProjects, replaceAllPositions, replaceAllOverheads, replaceAllEmployees, replaceAllProducts, replaceAllSubscriptions, replaceAllCustomers, replaceAllCommissionPayees, replaceAllCommissions, replaceAllLedger, setCompanyInfo, setActiveProjectId]
+    [replaceAllProjects, replaceAllPositions, replaceAllOverheads, replaceAllEmployees, replaceAllProducts, replaceAllSubscriptions, replaceAllCustomers, replaceAllCommissionPayees, replaceAllCommissions, replaceAllLedger, replaceAllLoans, setCompanyInfo, setActiveProjectId]
   );
 
-  const isLoaded = projectsHydrated && companyHydrated && positionsApi.hydrated && overheadsApi.hydrated && employeesApi.hydrated && productsApi.hydrated && subscriptionsApi.hydrated && customersApi.hydrated && commissionPayeesApi.hydrated && commissionsApi.hydrated && ledgerApi.hydrated && cashflowHydrated;
+  const isLoaded = projectsHydrated && companyHydrated && positionsApi.hydrated && overheadsApi.hydrated && employeesApi.hydrated && productsApi.hydrated && subscriptionsApi.hydrated && customersApi.hydrated && commissionPayeesApi.hydrated && commissionsApi.hydrated && ledgerApi.hydrated && loansApi.hydrated && cashflowHydrated;
 
   const value = useMemo(() => ({
     isLoaded,
@@ -377,6 +389,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     addLedgerEntry: ledgerApi.addLedgerEntry,
     updateLedgerEntry: ledgerApi.updateLedgerEntry,
     deleteLedgerEntry: ledgerApi.deleteLedgerEntry,
+    loans,
+    addLoan: loansApi.addLoan,
+    updateLoan: loansApi.updateLoan,
+    deleteLoan: loansApi.deleteLoan,
     cashflowSettings,
     setCashflowSettings,
     exportData,
@@ -396,6 +412,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     commissionPayeesApi.deletePayee, commissions, commissionsApi.addCommission,
     commissionsApi.updateCommission, commissionsApi.deleteCommission,
     ledger, ledgerApi.addLedgerEntry, ledgerApi.updateLedgerEntry, ledgerApi.deleteLedgerEntry,
+    loans, loansApi.addLoan, loansApi.updateLoan, loansApi.deleteLoan,
     cashflowSettings, setCashflowSettings, exportData, importData
   ]);
 

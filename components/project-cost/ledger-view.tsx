@@ -4,11 +4,13 @@ import React, { useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import {
   LedgerEntry, LedgerDirection, LedgerCategory, LedgerAttachment,
-  Project, Subscription,
+  Project, Subscription, CompanyInfo,
 } from "@/lib/types";
 import {
   summarizeLedger, summarizeLedgerByMonth, LEDGER_CATEGORY_LABELS,
+  summarizeReimbursements, isPendingReimbursement, listMonthKeys,
 } from "@/lib/ledger";
+import { exportMonthlyExpensesToExcel } from "@/lib/excel-export";
 import { uploadSlip, getSlipUrl, deleteSlips, MAX_SLIP_SIZE_BYTES } from "@/lib/supabase/storage";
 import { newLedgerId } from "@/hooks/use-ledger";
 import { EditGate } from "@/components/project-cost/edit-gate";
@@ -17,12 +19,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   Plus, Trash2, Edit2, BookText, Search, ArrowDownCircle, ArrowUpCircle,
-  Paperclip, Loader2, FileText, X,
+  Paperclip, Loader2, FileText, X, Download, HandCoins, CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -30,19 +33,30 @@ interface LedgerViewProps {
   ledger: LedgerEntry[];
   projects: Project[];
   subscriptions: Subscription[];
+  companyInfo?: CompanyInfo;
   onAddEntry: (entry: Omit<LedgerEntry, "createdAt" | "updatedAt" | "ownerId">) => void;
   onUpdateEntry: (entry: LedgerEntry) => void;
   onDeleteEntry: (id: string) => void;
 }
 
+const THIS_MONTH = () => new Date().toISOString().slice(0, 7);
+
+/** "2026-05" -> "พ.ค. 2569" */
+const monthKeyLabel = (key: string) => {
+  const [y, m] = key.split("-").map(Number);
+  const TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+  return y && m ? `${TH[m - 1]} ${y + 543}` : key;
+};
+
 const fmt = (v: number) => new Intl.NumberFormat("th-TH", { maximumFractionDigits: 0 }).format(v);
 
 const CATEGORIES: LedgerCategory[] = [
   "project_payment", "subscription", "commission",
-  "salary", "overhead", "tax", "refund", "other",
+  "salary", "overhead", "tax", "refund",
+  "loan_received", "loan_principal", "loan_interest", "other",
 ];
 
-type FilterId = "all" | "in" | "out";
+type FilterId = "all" | "in" | "out" | "pending";
 
 const todayISO = () => new Date().toISOString().split("T")[0];
 
@@ -50,6 +64,7 @@ export function LedgerView({
   ledger,
   projects,
   subscriptions,
+  companyInfo,
   onAddEntry,
   onUpdateEntry,
   onDeleteEntry,
@@ -59,6 +74,7 @@ export function LedgerView({
   const [editing, setEditing] = useState<LedgerEntry | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<FilterId>("all");
+  const [exportMonth, setExportMonth] = useState<string>(THIS_MONTH());
 
   // Form state
   const [draftId, setDraftId] = useState<string>("");
@@ -74,6 +90,10 @@ export function LedgerView({
   const [description, setDescription] = useState("");
   const [sourceType, setSourceType] = useState<NonNullable<LedgerEntry["sourceType"]>>("manual");
   const [sourceId, setSourceId] = useState("");
+  const [reimbursable, setReimbursable] = useState(false);
+  const [paidBy, setPaidBy] = useState("");
+  const [reimbursementStatus, setReimbursementStatus] = useState<"pending" | "reimbursed">("pending");
+  const [reimbursedDate, setReimbursedDate] = useState("");
   const [attachments, setAttachments] = useState<LedgerAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
 
@@ -81,12 +101,22 @@ export function LedgerView({
 
   const summary = useMemo(() => summarizeLedger(ledger), [ledger]);
   const months = useMemo(() => summarizeLedgerByMonth(ledger), [ledger]);
+  const reimburse = useMemo(() => summarizeReimbursements(ledger), [ledger]);
+  const monthKeys = useMemo(() => {
+    const keys = listMonthKeys(ledger);
+    const now = THIS_MONTH();
+    return keys.includes(now) ? keys : [now, ...keys];
+  }, [ledger]);
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return [...ledger]
       .filter((e) => {
-        if (filter !== "all" && e.direction !== filter) return false;
+        if (filter === "pending") {
+          if (!isPendingReimbursement(e)) return false;
+        } else if (filter !== "all" && e.direction !== filter) {
+          return false;
+        }
         if (q) {
           const hay = `${e.counterparty ?? ""} ${e.reference ?? ""} ${e.description ?? ""} ${LEDGER_CATEGORY_LABELS[e.category]}`.toLowerCase();
           if (!hay.includes(q)) return false;
@@ -110,6 +140,10 @@ export function LedgerView({
     setDescription("");
     setSourceType("manual");
     setSourceId("");
+    setReimbursable(false);
+    setPaidBy("");
+    setReimbursementStatus("pending");
+    setReimbursedDate("");
     setAttachments([]);
   };
 
@@ -175,6 +209,14 @@ export function LedgerView({
     description: description.trim() || undefined,
     sourceType,
     sourceId: sourceType !== "manual" && sourceId ? sourceId : undefined,
+    // เคสสำรองจ่ายใช้กับเงินออกเท่านั้น
+    reimbursable: direction === "out" && reimbursable ? true : undefined,
+    paidBy: direction === "out" && reimbursable ? (paidBy.trim() || undefined) : undefined,
+    reimbursementStatus: direction === "out" && reimbursable ? reimbursementStatus : undefined,
+    reimbursedDate:
+      direction === "out" && reimbursable && reimbursementStatus === "reimbursed" && reimbursedDate
+        ? reimbursedDate
+        : undefined,
     attachments,
   });
 
@@ -201,6 +243,10 @@ export function LedgerView({
     setDescription(entry.description ?? "");
     setSourceType(entry.sourceType ?? "manual");
     setSourceId(entry.sourceId ?? "");
+    setReimbursable(!!entry.reimbursable);
+    setPaidBy(entry.paidBy ?? "");
+    setReimbursementStatus(entry.reimbursementStatus ?? "pending");
+    setReimbursedDate(entry.reimbursedDate ?? "");
     setAttachments(entry.attachments ?? []);
     setIsEditOpen(true);
   };
@@ -223,6 +269,32 @@ export function LedgerView({
     }
     onDeleteEntry(entry.id);
     toast.success("ลบรายการเรียบร้อย");
+  };
+
+  // ปุ่มลัด: ทำเครื่องหมายว่าเบิกคืนแล้ว (บริษัทจ่ายคืนวันนี้)
+  const handleMarkReimbursed = (entry: LedgerEntry) => {
+    onUpdateEntry({
+      ...entry,
+      reimbursementStatus: "reimbursed",
+      reimbursedDate: entry.reimbursedDate || todayISO(),
+    });
+    toast.success("ทำเครื่องหมายเบิกคืนแล้ว");
+  };
+
+  const handleExportMonth = async () => {
+    const hasOut = ledger.some(
+      (e) => e.direction === "out" && e.date?.slice(0, 7) === exportMonth
+    );
+    if (!hasOut) {
+      toast.error(`ไม่มีรายการเงินออกในเดือน ${monthKeyLabel(exportMonth)}`);
+      return;
+    }
+    try {
+      await exportMonthlyExpensesToExcel(ledger, exportMonth, companyInfo);
+      toast.success(`ส่งออกค่าใช้จ่ายเดือน ${monthKeyLabel(exportMonth)} แล้ว`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "ส่งออกไม่สำเร็จ");
+    }
   };
 
   const renderFormBody = () => (
@@ -337,6 +409,49 @@ export function LedgerView({
         <Textarea id="led-desc" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
       </div>
 
+      {/* สำรองจ่าย — เฉพาะรายการเงินออก */}
+      {direction === "out" && (
+        <div className="rounded-lg border border-amber-300/70 bg-amber-50/40 dark:bg-amber-950/10 p-3 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <HandCoins className="h-4 w-4 text-amber-600" />
+              <div>
+                <Label htmlFor="led-reimb" className="cursor-pointer">สำรองจ่าย (จ่ายเงินส่วนตัวก่อน)</Label>
+                <p className="text-[11px] text-muted-foreground">ออกเงินแทนบริษัทก่อน แล้วค่อยเบิกคืน</p>
+              </div>
+            </div>
+            <Switch id="led-reimb" checked={reimbursable} onCheckedChange={setReimbursable} />
+          </div>
+
+          {reimbursable && (
+            <div className="grid gap-3 pt-1">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="led-paidby">ผู้สำรองจ่าย</Label>
+                  <Input id="led-paidby" value={paidBy} onChange={(e) => setPaidBy(e.target.value)} placeholder="เช่น ชื่อพนักงาน/เจ้าของ" />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="led-rstatus">สถานะเบิกคืน</Label>
+                  <Select value={reimbursementStatus} onValueChange={(v) => setReimbursementStatus(v as "pending" | "reimbursed")}>
+                    <SelectTrigger id="led-rstatus"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">รอเบิกคืน</SelectItem>
+                      <SelectItem value="reimbursed">เบิกคืนแล้ว</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {reimbursementStatus === "reimbursed" && (
+                <div className="grid gap-2">
+                  <Label htmlFor="led-rdate">วันที่บริษัทจ่ายคืน</Label>
+                  <Input id="led-rdate" type="date" value={reimbursedDate} onChange={(e) => setReimbursedDate(e.target.value)} />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Slip attachments */}
       <div className="grid gap-2">
         <Label>ไฟล์แนบ (slip / ใบเสร็จ)</Label>
@@ -399,14 +514,32 @@ export function LedgerView({
           </p>
         </div>
 
-        <Dialog open={isAddOpen} onOpenChange={handleOpenAdd}>
-          <EditGate>
-            <DialogTrigger asChild>
-              <Button className="gap-2 font-semibold">
-                <Plus className="h-4 w-4" /> เพิ่มรายการ
-              </Button>
-            </DialogTrigger>
-          </EditGate>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Export ค่าใช้จ่ายรายเดือน (ส่งสำนักงานบัญชี) */}
+          <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-card/40 p-1">
+            <Select value={exportMonth} onValueChange={setExportMonth}>
+              <SelectTrigger className="h-8 w-[130px] border-0 bg-transparent text-xs shadow-none focus:ring-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {monthKeys.map((k) => (
+                  <SelectItem key={k} value={k}>{monthKeyLabel(k)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" onClick={handleExportMonth} className="h-8 gap-1.5 text-xs" title="ส่งออกรายงานค่าใช้จ่ายเดือนนี้เป็น Excel">
+              <Download className="h-3.5 w-3.5" /> Excel
+            </Button>
+          </div>
+
+          <Dialog open={isAddOpen} onOpenChange={handleOpenAdd}>
+            <EditGate>
+              <DialogTrigger asChild>
+                <Button className="gap-2 font-semibold">
+                  <Plus className="h-4 w-4" /> เพิ่มรายการ
+                </Button>
+              </DialogTrigger>
+            </EditGate>
           <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
             <form onSubmit={handleAddSubmit}>
               <DialogHeader>
@@ -419,11 +552,12 @@ export function LedgerView({
               </DialogFooter>
             </form>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+        </div>
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Card className="border-emerald-300 bg-emerald-50/60 dark:bg-emerald-950/20">
           <CardContent className="pt-4">
             <div className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1">
@@ -456,6 +590,15 @@ export function LedgerView({
             <div className="text-[11px] text-muted-foreground">{months.length} เดือน</div>
           </CardContent>
         </Card>
+        <Card className="border-amber-300 bg-amber-50/60 dark:bg-amber-950/20">
+          <CardContent className="pt-4">
+            <div className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1">
+              <HandCoins className="h-3.5 w-3.5 text-amber-600" /> ค้างเบิกคืน
+            </div>
+            <div className="text-lg font-black text-amber-600 font-mono">฿{fmt(reimburse.pendingTotal)}</div>
+            <div className="text-[11px] text-muted-foreground">{reimburse.pendingCount} รายการสำรองจ่าย</div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters + Search */}
@@ -464,6 +607,7 @@ export function LedgerView({
           {filterButton("all", "ทั้งหมด", ledger.length)}
           {filterButton("in", "เงินเข้า", summary.countIn)}
           {filterButton("out", "เงินออก", summary.countOut)}
+          {reimburse.pendingCount > 0 && filterButton("pending", "ค้างเบิก", reimburse.pendingCount)}
         </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -509,7 +653,20 @@ export function LedgerView({
                           </span>
                         </TableCell>
                         <TableCell className="text-xs">
-                          <div className="font-semibold">{e.counterparty || <span className="text-muted-foreground italic">—</span>}</div>
+                          <div className="font-semibold flex items-center gap-1.5">
+                            {e.counterparty || <span className="text-muted-foreground italic">—</span>}
+                            {e.reimbursable && (
+                              e.reimbursementStatus === "reimbursed" ? (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 font-normal" title={e.reimbursedDate ? `เบิกคืนแล้ว ${e.reimbursedDate}` : "เบิกคืนแล้ว"}>
+                                  <CheckCircle2 className="h-2.5 w-2.5" /> เบิกคืนแล้ว
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 font-normal" title={e.paidBy ? `สำรองจ่ายโดย ${e.paidBy}` : "สำรองจ่าย รอเบิกคืน"}>
+                                  <HandCoins className="h-2.5 w-2.5" /> ค้างเบิก
+                                </span>
+                              )
+                            )}
+                          </div>
                           {e.description && <div className="text-muted-foreground truncate max-w-[220px]" title={e.description}>{e.description}</div>}
                           {e.reference && <div className="text-[10px] text-muted-foreground font-mono">อ้างอิง: {e.reference}</div>}
                         </TableCell>
@@ -528,6 +685,11 @@ export function LedgerView({
                         <TableCell>
                           <EditGate fallback={<span className="text-muted-foreground/40">—</span>}>
                             <div className="flex justify-center gap-1">
+                              {isPendingReimbursement(e) && (
+                                <Button size="icon" variant="ghost" onClick={() => handleMarkReimbursed(e)} className="h-7 w-7 text-emerald-600 hover:bg-emerald-500/10" title="ทำเครื่องหมายเบิกคืนแล้ว">
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
                               <Button size="icon" variant="ghost" onClick={() => handleStartEdit(e)} className="h-7 w-7" title="แก้ไข">
                                 <Edit2 className="h-3.5 w-3.5" />
                               </Button>

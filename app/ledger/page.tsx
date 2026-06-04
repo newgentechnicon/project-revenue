@@ -10,6 +10,7 @@ export default function LedgerPage() {
     ledger,
     projects,
     subscriptions,
+    companyInfo,
     addLedgerEntry,
     updateLedgerEntry,
     deleteLedgerEntry,
@@ -21,6 +22,7 @@ export default function LedgerPage() {
         ledger={ledger}
         projects={projects}
         subscriptions={subscriptions}
+        companyInfo={companyInfo}
         onAddEntry={addLedgerEntry}
         onUpdateEntry={updateLedgerEntry}
         onDeleteEntry={deleteLedgerEntry}

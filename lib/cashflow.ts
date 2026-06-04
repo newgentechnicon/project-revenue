@@ -1,11 +1,15 @@
-import { Project, PositionRate, OverheadItem, Employee, Subscription, Product, Commission, CommissionPayee } from "./types";
+import { Project, PositionRate, OverheadItem, Employee, Subscription, Product, Commission, CommissionPayee, Loan } from "./types";
 import { calculateProjectCosts } from "./calculations";
 import { getProjectDateRange, TimelineWindow, computeYearWindow } from "./resource-planning";
 import { expandSubscriptionInflows } from "./subscriptions";
 import { expandCommissionPayouts } from "./commissions";
+import { isRepaymentPaid } from "./loans";
 
 /** projectId สังเคราะห์สำหรับรวมรายรับประจำ (subscriptions) เป็น series เดียวในกราฟ */
 export const RECURRING_INFLOW_PROJECT_ID = "__recurring__";
+
+/** projectId สังเคราะห์สำหรับรวมเงินกู้รับเข้า เป็น series เดียวในกราฟ */
+export const LOAN_INFLOW_PROJECT_ID = "__loan__";
 
 /** Fully-loaded monthly cost for one employee. */
 export function employeeMonthlyCost(emp: Employee): number {
@@ -38,7 +42,7 @@ export interface CashflowInflowDetail {
 export interface CashflowOutflowDetail {
   projectId?: string; // undefined = overhead/payroll (company-wide)
   projectName?: string;
-  category: "labor" | "direct" | "contingency" | "overhead" | "payroll" | "bonus" | "commission";
+  category: "labor" | "direct" | "contingency" | "overhead" | "payroll" | "bonus" | "commission" | "loan";
   label: string;
   amount: number;
 }
@@ -83,6 +87,10 @@ export interface CashflowOptions {
   commissionPayees?: CommissionPayee[];
   /** รวมค่าคอมเข้า outflow หรือไม่ (default true) */
   includeCommissions?: boolean;
+  /** เงินกู้ — เพิ่มเงินกู้รับเข้าเป็น inflow + งวดผ่อนเป็น outflow */
+  loans?: Loan[];
+  /** รวมเงินกู้เข้า cashflow หรือไม่ (default true) */
+  includeLoans?: boolean;
 }
 
 /**
@@ -119,6 +127,8 @@ export function computeCashflow(
   const includeCommissions = options.includeCommissions ?? true;
   const commissions = options.commissions ?? [];
   const commissionPayees = options.commissionPayees ?? [];
+  const includeLoans = options.includeLoans ?? true;
+  const loans = options.loans ?? [];
 
   // Initialize months
   const months: CashflowMonth[] = window.months.map((m) => ({
@@ -345,6 +355,49 @@ export function computeCashflow(
         label: `ค่าคอม: ${po.payeeName} · ${po.label}`,
         amount: po.amount,
       });
+    }
+  }
+
+  // --- Loans: เงินกู้รับเข้า (inflow) + งวดผ่อน (outflow) ---
+  // เงินกู้ไม่ได้ถูกบันทึกใน ledger อัตโนมัติ จึงเสริมเข้า projection ตรงนี้ได้โดยไม่ซ้ำ
+  if (includeLoans && loans.length > 0) {
+    for (const loan of loans) {
+      // เงินกู้รับเข้า ณ วันเริ่ม
+      if (loan.principal > 0 && loan.startDate) {
+        const d = new Date(loan.startDate + "T00:00:00Z");
+        if (!Number.isNaN(d.getTime())) {
+          const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth()).padStart(2, "0")}`;
+          const idx = monthIndex.get(key);
+          if (idx !== undefined) {
+            months[idx].inflow += loan.principal;
+            months[idx].inflowDetails.push({
+              projectId: LOAN_INFLOW_PROJECT_ID,
+              projectName: "เงินกู้รับเข้า",
+              installmentName: loan.lender,
+              amount: loan.principal,
+              invoiceDate: loan.startDate,
+              receivedDate: loan.startDate,
+            });
+          }
+        }
+      }
+
+      // งวดผ่อนชำระ (ทั้งจ่ายแล้วและยังไม่จ่าย) — โผล่เป็น outflow ในเดือนนัดจ่าย
+      for (const r of loan.repayments) {
+        const amount = (r.principal || 0) + (r.interest || 0);
+        if (amount <= 0 || !r.date) continue;
+        const d = new Date(r.date + "T00:00:00Z");
+        if (Number.isNaN(d.getTime())) continue;
+        const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth()).padStart(2, "0")}`;
+        const idx = monthIndex.get(key);
+        if (idx === undefined) continue;
+        months[idx].outflow += amount;
+        months[idx].outflowDetails.push({
+          category: "loan",
+          label: `ผ่อนเงินกู้: ${loan.lender}${isRepaymentPaid(r) ? "" : " (ตามแผน)"}`,
+          amount,
+        });
+      }
     }
   }
 

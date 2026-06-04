@@ -9,6 +9,7 @@ import { KPICards } from "./dashboard/kpi-cards";
 import { ProjectSettingsCard } from "./dashboard/project-settings-card";
 import { PricingCalculator } from "./dashboard/pricing-calculator";
 import { CostCharts } from "./dashboard/cost-charts";
+import { ModuleBreakdownCard } from "./dashboard/module-breakdown-card";
 import { ScenarioComparison } from "./dashboard/scenario-comparison";
 
 interface DashboardProps {
@@ -44,6 +45,8 @@ export function Dashboard({
         />
         <CostCharts project={project} calculations={calculations} />
       </div>
+
+      <ModuleBreakdownCard project={project} positions={positions} calculations={calculations} />
 
       <ScenarioComparison
         project={project}

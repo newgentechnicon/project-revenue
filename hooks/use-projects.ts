@@ -125,6 +125,11 @@ export function useProjects() {
         prev.map((proj) => ({
           ...proj,
           allocations: proj.allocations.filter((a) => a.positionId !== positionId),
+          // ลบออกจากทุกโมดูลด้วย (โหมดประเมินราย Module)
+          modules: proj.modules?.map((m) => ({
+            ...m,
+            allocations: m.allocations.filter((a) => a.positionId !== positionId),
+          })),
         }))
       );
     },

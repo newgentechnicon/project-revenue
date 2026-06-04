@@ -8,7 +8,7 @@ import {
   Download, Upload, Moon, Sun, Laptop, DollarSign,
   FolderKanban, CalendarRange, LogOut, User as UserIcon, Banknote,
   Repeat, Package, Building2, BarChart3, Receipt,
-  Percent, Handshake, BookText, Users2,
+  Percent, Handshake, BookText, Users2, Landmark,
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -31,6 +31,7 @@ export type SidebarViewId =
   | "subscriptions"
   | "commissions"
   | "ledger"
+  | "loans"
   | "master_products"
   | "master_customers"
   | "master_commission_payees"
@@ -74,6 +75,7 @@ const NAV_SECTIONS: NavSection[] = [
       { id: "subscriptions", label: "รายรับประจำ", icon: Repeat },
       { id: "commissions", label: "ค่าคอมมิชชั่น", icon: Percent },
       { id: "ledger", label: "รายการเดินบัญชี", icon: BookText },
+      { id: "loans", label: "เงินกู้ยืม", icon: Landmark },
       { id: "cashflow", label: "Cashflow", icon: Banknote },
       { id: "company_analytics", label: "Company Analytics", icon: BarChart3 },
     ],
@@ -159,21 +161,21 @@ export function Sidebar({
   return (
     <div className="flex h-full w-full flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
       {/* Brand */}
-      <div className="flex h-16 items-center px-6 gap-2.5 border-b border-sidebar-border">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-          <DollarSign className="h-5 w-5 font-black" />
+      <div className="flex h-14 items-center px-4 gap-2.5 border-b border-sidebar-border">
+        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm">
+          <DollarSign className="h-4 w-4 font-black" />
         </div>
         <div className="flex flex-col">
-          <span className="font-bold text-sm leading-none tracking-tight">Software Cost Pro</span>
-          <span className="text-[10px] text-muted-foreground mt-0.5">ระบบวิเคราะห์และคำนวณต้นทุน</span>
+          <span className="font-bold text-[13px] leading-none tracking-tight">Software Cost Pro</span>
+          <span className="text-[9px] text-muted-foreground mt-0.5">ระบบวิเคราะห์และคำนวณต้นทุน</span>
         </div>
       </div>
 
       {/* Main Navigation — grouped */}
-      <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
+      <nav className="flex-1 px-2.5 py-3 space-y-4 overflow-y-auto">
         {visibleSections.map((section) => (
-          <div key={section.title} className="space-y-1">
-            <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
+          <div key={section.title} className="space-y-0.5">
+            <div className="px-2.5 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
               {section.title}
             </div>
             {section.items.map((item) => {
@@ -186,9 +188,9 @@ export function Sidebar({
                   variant={active ? "secondary" : "ghost"}
                   size="sm"
                   onClick={() => onSelectView(item.id)}
-                  className="w-full justify-start text-sm font-semibold h-11 gap-2.5 px-3"
+                  className={`w-full justify-start text-[13px] h-9 gap-2.5 px-2.5 ${active ? "font-semibold" : "font-medium"}`}
                 >
-                  <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <Icon className={`h-4 w-4 shrink-0 ${active ? "text-primary" : "text-muted-foreground"}`} />
                   {item.label}
                 </Button>
               );
@@ -198,17 +200,17 @@ export function Sidebar({
 
         {/* ตั้งค่า — เฉพาะผู้ดูแล */}
         {isAdmin && (
-          <div className="space-y-1">
-            <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
+          <div className="space-y-0.5">
+            <div className="px-2.5 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
               ตั้งค่า
             </div>
             <Button
               variant={activeView === "team" ? "secondary" : "ghost"}
               size="sm"
               onClick={() => onSelectView("team")}
-              className="w-full justify-start text-sm font-semibold h-11 gap-2.5 px-3"
+              className={`w-full justify-start text-[13px] h-9 gap-2.5 px-2.5 ${activeView === "team" ? "font-semibold" : "font-medium"}`}
             >
-              <Users2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <Users2 className={`h-4 w-4 shrink-0 ${activeView === "team" ? "text-primary" : "text-muted-foreground"}`} />
               จัดการทีม
             </Button>
           </div>
@@ -216,7 +218,7 @@ export function Sidebar({
       </nav>
 
       {/* Footer: User + Backup + Theme */}
-      <div className="p-4 border-t border-sidebar-border bg-sidebar-accent/10 space-y-3">
+      <div className="p-3 border-t border-sidebar-border bg-sidebar-accent/10 space-y-2.5">
         {/* User block — แสดงเฉพาะเมื่อ login ผ่าน Supabase */}
         {mode === "supabase" && user && (
           <div className="flex items-center gap-2 pb-3 border-b border-sidebar-border/40">
