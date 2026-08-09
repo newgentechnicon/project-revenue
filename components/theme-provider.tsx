@@ -47,7 +47,8 @@ function ThemeHotkey() {
         return
       }
 
-      if (event.key.toLowerCase() !== "d") {
+      // event.key อาจเป็น undefined ในบาง events (IME composition, autofill, synthetic events)
+      if (typeof event.key !== "string" || event.key.toLowerCase() !== "d") {
         return
       }
 

@@ -127,3 +127,96 @@
     @apply font-sans;
     }
 }
+
+/* ======================================================
+   Print styles — สำหรับใบเสนอราคา PDF
+   ====================================================== */
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm 14mm;
+  }
+
+  html, body {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide ทุกอย่างที่ไม่ใช่ใบเสนอราคา */
+  aside,
+  header,
+  nav,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Reset main layout for print */
+  main {
+    display: block !important;
+  }
+
+  /* The actual quote document */
+  .print-container {
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .print-container > div {
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    background: white !important;
+  }
+
+  /* Tables: avoid breaking rows */
+  table {
+    page-break-inside: auto;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  /* Headings stay with body */
+  h1, h2, h3, .text-sm.font-bold {
+    page-break-after: avoid;
+  }
+
+  /* Improve readability of small text in print */
+  .text-\[10px\],
+  .text-\[11px\] {
+    font-size: 9pt !important;
+  }
+
+  .text-xs {
+    font-size: 9.5pt !important;
+  }
+
+  /* Force colors on totals and primary text */
+  .text-primary {
+    color: oklch(0.488 0.243 264.376) !important;
+  }
+
+  .text-emerald-700,
+  .text-emerald-600 {
+    color: #047857 !important;
+  }
+
+  .text-rose-700,
+  .text-rose-600 {
+    color: #be123c !important;
+  }
+}
