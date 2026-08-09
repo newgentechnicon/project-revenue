@@ -6,23 +6,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DollarSign, Loader2, Mail, Lock, AlertCircle, CheckCircle2 } from "lucide-react";
+import { DollarSign, Loader2, Mail, Lock, AlertCircle, Building2 } from "lucide-react";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 
 export function AuthForm() {
-  const { signIn, signUp } = useAuth();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const configured = isSupabaseConfigured();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setInfo(null);
     if (!email.trim() || !password.trim()) {
       setError("กรุณากรอกอีเมลและรหัสผ่าน");
       return;
@@ -34,16 +31,8 @@ export function AuthForm() {
 
     setSubmitting(true);
     try {
-      if (mode === "signin") {
-        const { error } = await signIn(email.trim(), password);
-        if (error) setError(error);
-      } else {
-        const { error, needsEmailConfirm } = await signUp(email.trim(), password);
-        if (error) setError(error);
-        else if (needsEmailConfirm) {
-          setInfo(`สร้างบัญชีสำเร็จ — กรุณาเช็คอีเมล ${email} เพื่อยืนยันก่อนเข้าใช้งาน`);
-        }
-      }
+      const { error } = await signIn(email.trim(), password);
+      if (error) setError(error);
     } finally {
       setSubmitting(false);
     }
@@ -57,9 +46,7 @@ export function AuthForm() {
             <DollarSign className="h-6 w-6" />
           </div>
           <CardTitle className="text-xl">Software Cost Pro</CardTitle>
-          <CardDescription>
-            {mode === "signin" ? "เข้าสู่ระบบเพื่อใช้งาน" : "สร้างบัญชีใหม่"}
-          </CardDescription>
+          <CardDescription>เข้าสู่ระบบด้วยบัญชีที่ผู้ดูแลสร้างให้</CardDescription>
         </CardHeader>
         <CardContent>
           {!configured && (
@@ -86,7 +73,7 @@ export function AuthForm() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="your@email.com"
                 disabled={submitting || !configured}
-                autoComplete={mode === "signin" ? "email" : "email"}
+                autoComplete="email"
                 required
               />
             </div>
@@ -102,7 +89,7 @@ export function AuthForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="อย่างน้อย 8 ตัวอักษร"
                 disabled={submitting || !configured}
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                autoComplete="current-password"
                 minLength={8}
                 required
               />
@@ -115,41 +102,15 @@ export function AuthForm() {
               </div>
             )}
 
-            {info && (
-              <div className="flex items-start gap-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
-                <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                <span>{info}</span>
-              </div>
-            )}
-
             <Button type="submit" className="w-full gap-2" disabled={submitting || !configured}>
               {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {mode === "signin" ? "เข้าสู่ระบบ" : "สร้างบัญชี"}
+              เข้าสู่ระบบ
             </Button>
           </form>
 
-          <div className="text-center text-xs text-muted-foreground mt-4">
-            {mode === "signin" ? (
-              <>
-                ยังไม่มีบัญชี?{" "}
-                <button
-                  onClick={() => { setMode("signup"); setError(null); setInfo(null); }}
-                  className="text-primary font-semibold hover:underline"
-                >
-                  สร้างบัญชี
-                </button>
-              </>
-            ) : (
-              <>
-                มีบัญชีอยู่แล้ว?{" "}
-                <button
-                  onClick={() => { setMode("signin"); setError(null); setInfo(null); }}
-                  className="text-primary font-semibold hover:underline"
-                >
-                  เข้าสู่ระบบ
-                </button>
-              </>
-            )}
+          <div className="mt-4 flex items-start gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
+            <Building2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>ยังไม่มีบัญชี กรุณาติดต่อผู้ดูแลระบบให้สร้างบริษัทและบัญชีผู้ใช้ก่อน</span>
           </div>
         </CardContent>
       </Card>

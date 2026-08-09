@@ -1,28 +1,28 @@
-"use client";
+"use client"
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/hooks/use-auth";
-import { isSupabaseConfigured } from "@/lib/supabase/client";
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/hooks/use-auth"
+import { isSupabaseConfigured } from "@/lib/supabase/client"
 
 export default function RootPage() {
-  const router = useRouter();
-  const { loading, user } = useAuth();
+  const router = useRouter()
+  const { loading, user } = useAuth()
 
   useEffect(() => {
-    if (loading) return;
+    if (loading) return
     if (isSupabaseConfigured() && !user) {
-      router.replace("/login");
+      router.replace("/login")
     } else {
-      router.replace("/projects");
+      router.replace("/organizations")
     }
-  }, [loading, user, router]);
+  }, [loading, user, router])
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground animate-bounce">
+      <div className="flex h-12 w-12 animate-bounce items-center justify-center rounded-xl bg-primary text-primary-foreground">
         <span className="text-xl font-bold">฿</span>
       </div>
     </div>
-  );
+  )
 }

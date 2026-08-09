@@ -148,13 +148,13 @@ export class SupabaseStorageRepository implements StorageRepository {
   async read(key: string): Promise<string | null> {
     const userId = await this.getUserId();
     if (!userId) return null;
+    const orgId = await this.getOrgId();
+    if (!orgId) return null;
 
     if (MULTI_ROW_TABLES[key]) {
       return this.readMultiRow(MULTI_ROW_TABLES[key], userId);
     }
     if (SINGLETON_TABLES[key]) {
-      const orgId = await this.getOrgId();
-      if (!orgId) return null;
       return this.readSingleton(SINGLETON_TABLES[key], orgId);
     }
     // Unknown key → no remote storage
@@ -164,14 +164,14 @@ export class SupabaseStorageRepository implements StorageRepository {
   async write(key: string, value: string): Promise<void> {
     const userId = await this.getUserId();
     if (!userId) return;
+    const orgId = await this.getOrgId();
+    if (!orgId) return;
 
     if (MULTI_ROW_TABLES[key]) {
       await this.upsertMultiRow(MULTI_ROW_TABLES[key], userId, value);
       return;
     }
     if (SINGLETON_TABLES[key]) {
-      const orgId = await this.getOrgId();
-      if (!orgId) return;
       await this.writeSingleton(SINGLETON_TABLES[key], orgId, userId, value);
       return;
     }
@@ -181,6 +181,8 @@ export class SupabaseStorageRepository implements StorageRepository {
   async deleteItem(key: string, id: string): Promise<void> {
     const userId = await this.getUserId();
     if (!userId) return;
+    const orgId = await this.getOrgId();
+    if (!orgId) return;
 
     const table = MULTI_ROW_TABLES[key];
     if (!table) {
@@ -209,14 +211,14 @@ export class SupabaseStorageRepository implements StorageRepository {
   async replaceAll(key: string, value: string): Promise<void> {
     const userId = await this.getUserId();
     if (!userId) return;
+    const orgId = await this.getOrgId();
+    if (!orgId) return;
 
     if (MULTI_ROW_TABLES[key]) {
       await this.replaceMultiRow(MULTI_ROW_TABLES[key], userId, value);
       return;
     }
     if (SINGLETON_TABLES[key]) {
-      const orgId = await this.getOrgId();
-      if (!orgId) return;
       await this.writeSingleton(SINGLETON_TABLES[key], orgId, userId, value);
       return;
     }
@@ -225,6 +227,8 @@ export class SupabaseStorageRepository implements StorageRepository {
   async remove(key: string): Promise<void> {
     const userId = await this.getUserId();
     if (!userId) return;
+    const orgId = await this.getOrgId();
+    if (!orgId) return;
 
     // ไม่กรอง user_id — RLS เป็นตัวจำกัดขอบเขต (org + data_scope)
     if (MULTI_ROW_TABLES[key]) {
@@ -233,8 +237,6 @@ export class SupabaseStorageRepository implements StorageRepository {
       return;
     }
     if (SINGLETON_TABLES[key]) {
-      const orgId = await this.getOrgId();
-      if (!orgId) return;
       await this.supabase.from(SINGLETON_TABLES[key]).delete().eq("org_id", orgId);
     }
   }
@@ -250,11 +252,11 @@ export class SupabaseStorageRepository implements StorageRepository {
   }
 
   /**
-   * Org ปัจจุบันของผู้ใช้ (ผ่าน RPC current_org_id ที่ bypass RLS)
+   * Organization ที่ผู้ใช้เลือกจากหน้า Portal
    * ใช้กับ singleton tables ที่ผูกกับ org แทน user
    */
   private async getOrgId(): Promise<string | null> {
-    const { data, error } = await this.supabase.rpc("current_org_id");
+    const { data, error } = await this.supabase.rpc("get_active_organization");
     if (error) {
       console.error(`[supabase-storage] getOrgId failed:`, describeError(error));
       return null;

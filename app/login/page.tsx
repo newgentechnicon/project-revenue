@@ -1,30 +1,32 @@
-"use client";
+"use client"
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/hooks/use-auth";
-import { AuthForm } from "@/components/auth/auth-form";
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/hooks/use-auth"
+import { AuthForm } from "@/components/auth/auth-form"
 
 export default function LoginPage() {
-  const router = useRouter();
-  const { loading, user } = useAuth();
+  const router = useRouter()
+  const { loading, user } = useAuth()
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace("/projects");
+      router.replace("/organizations")
     }
-  }, [loading, user, router]);
+  }, [loading, user, router])
 
   if (loading || user) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background text-foreground gap-4">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground animate-bounce">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background text-foreground">
+        <div className="flex h-12 w-12 animate-bounce items-center justify-center rounded-xl bg-primary text-primary-foreground">
           <span className="text-xl font-bold">฿</span>
         </div>
-        <div className="text-sm font-semibold tracking-wider animate-pulse">กำลังเชื่อมต่อระบบ...</div>
+        <div className="animate-pulse text-sm font-semibold tracking-wider">
+          กำลังเชื่อมต่อระบบ...
+        </div>
       </div>
-    );
+    )
   }
 
-  return <AuthForm />;
+  return <AuthForm />
 }

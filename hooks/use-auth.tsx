@@ -14,7 +14,6 @@ interface AuthState {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: string | null; needsEmailConfirm: boolean }>;
   signOut: () => Promise<void>;
 }
 
@@ -30,6 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isSupabaseConfigured()) {
       // Supabase-only app — show config error via AuthGate
       clearStorageRepository();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMode("anonymous");
       setLoading(false);
       return;
@@ -38,18 +38,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const supabase = getSupabaseBrowserClient();
     let cancelled = false;
 
-    // เปิดใช้งาน session: ตั้ง storage repo → ตรวจ/สร้าง membership (auto-join org)
-    // → แล้วค่อย setMode("supabase") เพื่อกัน race กับการ hydrate ข้อมูล
+    // เปิดใช้งาน session หลังจากบัญชีถูกผูกกับบริษัทโดย Platform Admin แล้ว
     const activateSession = async (newSession: Session) => {
       setSession(newSession);
       setUser(newSession.user);
       setStorageRepository(new SupabaseStorageRepository(supabase));
-      try {
-        const { error } = await supabase.rpc("ensure_membership");
-        if (error) console.error("[use-auth] ensure_membership failed:", error);
-      } catch (e) {
-        console.error("[use-auth] ensure_membership threw:", e);
-      }
       if (!cancelled) setMode("supabase");
     };
 
@@ -90,29 +83,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const supabase = getSupabaseBrowserClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
-  };
-
-  const signUp = async (email: string, password: string) => {
-    if (!isSupabaseConfigured()) {
-      return { error: "Supabase ยังไม่ได้ตั้งค่า", needsEmailConfirm: false };
+    if (!error) {
+      const { error: clearError } = await supabase.rpc("clear_active_organization");
+      if (clearError) {
+        console.error("[use-auth] clear_active_organization failed:", clearError);
+      }
     }
-    const supabase = getSupabaseBrowserClient();
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) return { error: error.message, needsEmailConfirm: false };
-    // หาก auto-confirm ปิดอยู่ user ต้อง confirm email ก่อน
-    const needsEmailConfirm = !data.session;
-    return { error: null, needsEmailConfirm };
+    return { error: error?.message ?? null };
   };
 
   const signOut = async () => {
     if (!isSupabaseConfigured()) return;
     const supabase = getSupabaseBrowserClient();
+    await supabase.rpc("clear_active_organization");
     await supabase.auth.signOut();
   };
 
   return (
-    <AuthContext.Provider value={{ mode, user, session, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ mode, user, session, loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

@@ -132,7 +132,7 @@ export function TeamManagementView() {
         <CardContent className="pt-4">
           <div className="text-sm font-bold mb-1">สมาชิก ({members.length})</div>
           <p className="text-xs text-muted-foreground mb-4">
-            สมาชิกใหม่ที่สมัครเข้าระบบจะเข้าองค์กรนี้อัตโนมัติด้วยสิทธิ์ <span className="font-semibold">ผู้ชม (Viewer)</span> — ปรับสิทธิ์ได้ที่นี่
+            บัญชีผู้ใช้ถูกสร้างและผูกกับบริษัทจากหน้า Platform Admin — หลังจากนั้นปรับสิทธิ์ของสมาชิกบริษัทนี้ได้ที่นี่
           </p>
           <div className="overflow-x-auto -mx-2 sm:mx-0">
             <Table className="min-w-[680px]">
